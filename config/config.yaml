@@ -46,6 +46,7 @@ bxRescue_minLength:  10000
 bxRescue_windowSize:  1000
 bxRescue_minReadOverlapSupport:  2
 bxRescue_mem:  12G
+bxRescue_runtime:  "300:00:00"
 
 ## Plotting parameters ##
 plot_zoom:  FALSE
