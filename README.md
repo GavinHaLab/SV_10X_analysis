@@ -1,28 +1,28 @@
 # *Snakemake workflow for structural rearrangement analysis of 10X Genomics linked-read WGS*
 
 ## Description
-This workflow will run the [SvABA](https://github.com/walaj/svaba) structural variation (SV) analysis for a set of tumor-normal pairs, starting from the BAM files aligned using [Long Ranger](https://support.10xgenomics.com/genome-exome/software/pipelines/latest/what-is-long-ranger) software. The analysis includes structural variant prediction and assessment of barcode (BX) overlap from 10X linked-reads. It will also look for [TitanCNA](https://github.com/gavinha/TitanCNA) results and combine these results to output SV classes. 
-This analysis was used in and described in the publicationL
+This workflow will run the [SvABA](https://github.com/walaj/svaba) structural variation (SV) analysis for a set of tumor-normal pairs, starting from the BAM files aligned using [Long Ranger](https://support.10xgenomics.com/genome-exome/software/pipelines/latest/what-is-long-ranger) software. The analysis includes structural variant prediction and assessment of barcode (BX) overlap from 10X linked-reads. It will also look for [TitanCNA](https://github.com/gavinha/TitanCNA) results and combine these results to output SV classes.  
+This analysis was used and described in the publication:  
 Viswanathan SR*, Ha G*, Hoff A*, et al. Structural Alterations Driving Castration-Resistant Prostate Cancer Revealed by Linked-Read Genome Sequencing. *Cell* 174, 433–447.e19 (2018).
 
 ## Contact
 Gavin Ha  
 Fred Hutchinson Cancer Research Center  
 contact: <gavinha@gmail.com> or <gha@fredhutch.org>  
-Date: August 3, 2018  
+Date: August 7, 2018  
 
 ## Requirements
 ### Software packages or libraries
  - R-3.4
-	-optparse
-	-data.table
-	-GenomicRanges
-	-GenomeInfoDb
-	-VariantAnnotation
-	-plyr
-	-ggplot2
-	-reshape2
-	-stringr
+	-optparse  
+	-data.table  
+	-GenomicRanges  
+	-GenomeInfoDb  
+	-VariantAnnotation  
+	-plyr  
+	-ggplot2  
+	-reshape2  
+	-stringr  
  - Python 3.4 
    - snakemake-3.12.0
  - [samtools-1.3.1](http://www.htslib.org/)
@@ -32,10 +32,10 @@ Date: August 3, 2018
 The following scripts are used by this snakemake workflow:
  - [barCodeOverlap.R](code/barCodeOverlap.R) - 
  - [combineSVABAandTITAN.R](code/combineSVABAandTITAN.R) - 
- - [plotTitanSvaba.R](code/plotTitanSvaba.R) - Extracts allelic counts from the tumor sample at the germline heterozygous SNP sites
- - [svaba_utils.R](code/svaba_utils.R) - Main R script to run TitanCNA
- - [tenX_utils.R](code/tenX_utils.R) - R script to select optimal solution for each sample
- - [plotting.R](code/plotting.R) - R script to merge autosomes and chrX results, plus post-processing steps including adjusting max copy values.
+ - [plotTitanSvaba.R](code/plotTitanSvaba.R) - 
+ - [svaba_utils.R](code/svaba_utils.R) - 
+ - [tenX_utils.R](code/tenX_utils.R) - 
+ - [plotting.R](code/plotting.R) - 
 
 ### Tumour-Normal sample list [config/samples.yaml](config/samples.yaml)
 The list of tumour-normal paired samples should be defined in a YAML file. In particular, the [Long Ranger](https://support.10xgenomics.com/genome-exome/software/pipelines/latest/what-is-long-ranger) (v2.2.2) analysis directory is listed under samples.  See `config/samples.yaml` for an example.  Both fields `samples` and `pairings` must to be provided.  `pairings` key must match the tumour sample while the value must match the normal sample.
@@ -125,8 +125,8 @@ titan_results:  /path/to/TitanCNA/snakemake_results/
 Global reference files used by the `snakefiles` and scripts.  
 - `refGenome` specify the reference genome used in the Long Ranger analysis
 - `genomeStyle` specifies the chromosome naming convention to used for **output** files. Input files can be any convention as long as it is the same genome build. Only use `UCSC` (e.g. chr1) or `NCBI` (e.g. 1). 
-`cytobandFile` is used for plotting the chromosome idiograms and only needs to specify [data/cytoBand_hg38.txt](data/cytoBand_hg38.txt) if using hg38.
-`chrs` specifies the chromosomes to analyze; users do not need to be concerned about chromosome naming convention here as the code will handle it based on the `genomeStyle`.
+- `cytobandFile` is used for plotting the chromosome idiograms and only needs to specify [data/cytoBand_hg38.txt](data/cytoBand_hg38.txt) if using hg38.
+- `chrs` specifies the chromosomes to analyze; users do not need to be concerned about chromosome naming convention here as the code will handle it based on the `genomeStyle`.
 ```
 refGenome:  /path/to/ref/genome.fasta
 genomeBuild:  hg38
