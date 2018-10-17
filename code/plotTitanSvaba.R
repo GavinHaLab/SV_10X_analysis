@@ -38,7 +38,7 @@ opt <- parse_args(parseobj)
 print(opt)
 
 options(bitmapType='cairo', scipen=0)
-options(stringsAsFactors=F, scipen=999, bitmapType = "cairo", width=175)
+options(stringsAsFactors=F, bitmapType = "cairo", width=175)
 
 library(data.table)
 library(GenomicRanges)
@@ -75,7 +75,6 @@ plotType <- opt$plotCNAtype
 plotSize <- eval(parse(text=opt$plotSize))
 plotFormat <- opt$plotFormat
 outDir <- opt$outDir
-save.image("tmp.RData")
 width <- plotSize[1]  #6 8 
 height <- plotSize[2]  #3 3.5 #4 
 spacing <- 3
@@ -166,8 +165,8 @@ ploidyT <- as.numeric(params[2, 2])
 normCN <- 2
 ploidyS <- purity * ploidyT + (1-purity) * normCN
 if (yaxis == "integer"){
-	ulp[Chr!="X", LogRatio := log2(logRbasedCN(LogRatio, purity, ploidyT, cn=2))]
-	ulp[Chr=="X", LogRatio := log2(logRbasedCN(LogRatio, purity, ploidyT, cn=1))]
+	ulp[!grepl("X",Chr), LogRatio := log2(logRbasedCN(LogRatio, purity, ploidyT, cn=2))]
+	ulp[grepl("X",Chr), LogRatio := log2(logRbasedCN(LogRatio, purity, ploidyT, cn=1))]
 	colName <- "logR_Copy_Number"
 }else{
 	ulp[, LogRatio := LogRatio + log2(ploidyS / 2)]
@@ -179,15 +178,18 @@ if (yaxis == "integer"){
 if (plotType == "titan"){
 	ulp <- ulp[!is.na(Corrected_Call)]
 }
+ulp$Chr <- factor(ulp$Chr, levels = chrStr)
+ulp <- ulp[order(Chr)]
 
 ############# load Combined SV (SVABA, GROC, LongRanger) ##############
 sv <- fread(svFile)
-#save.image(file=outImage)
+save.image(file=outImage)
 
 #####################################
 ########## PLOT CHR RESULTS #########
 #####################################	 
 for (j in 1:length(chrStr)){
+  message("Plotting ", chrStr[j])
   ###################################
   ### SNOWMAN + BARCODE RESCUE ######
   outPlot <- paste0(outPlotDir, "/", id, "_CNA-SV-BX_",plotType,"_",chrStr[j],".",plotFormat)

@@ -597,4 +597,210 @@ plotFrequency <- function(freq, annot, chrs = c(1:22,"X"), seqinfo, ...){
  	invisible()     	
 }
 
+#######################################################
+### LONG RANGER FUNCTIONS  #####
+#######################################################
+
+#######################################################
+### Extract SV to data.frame from LONG RANGER VCF #####
+#######################################################
+getSVfromCollapsedVCF.LR <- function(vcf, chrs = c(1:22, "X"), genomeStyle = "NCBI"){
+	if (class(vcf) == "CollapsedVCF"){
+			ind.bnd <- which(info(vcf)$SVTYPE == "BND")
+			ind.sv <- which(info(vcf)$SVTYPE != "BND")
+			message("Processing ", length(ind.bnd), " BND and ", length(ind.sv), " phased records.")
+			svGR <- as.data.frame(rowRanges(vcf))
+			svGR$ALT <- unlist(svGR$ALT)
+			bkpt2 <- str_match(svGR$ALT, "([0-9XY]+):(\\d+)")[, 2:3]
+			mateID <- str_match(unlist(info(vcf)$MATEID), "[a-zA-Z0-9]+_[0-9]+")[, 1]
+			ID <- names(rowRanges(vcf))
+			sv <- data.frame(chromosome_1=as.vector(svGR$seqnames), start_1=as.numeric(svGR$start), 
+																chromosome_2=bkpt2[, 1], start_2=as.numeric(bkpt2[, 2]), REF=svGR$REF,
+																mateID=NA, alt_1=svGR$ALT, alt_2=NA, FILTER=rowRanges(vcf)$FILTER,
+																QUAL=svGR$QUAL, 
+																orient_1=NA, orient_2=NA, stringsAsFactors=FALSE)
+			## BND ##
+			sv[ind.bnd, "mateID"] <- mateID
+			## phased ##
+			sv[ind.sv, "mateID"] <- rownames(svGR)[ind.sv]
+			sv[ind.sv, "chromosome_2"] <- sv[ind.sv, "chromosome_1"]
+			sv[ind.sv, "start_2"] <- sv[ind.sv, "start_1"] + info(vcf)$SVLEN[ind.sv]
+					
+			rownames(sv) <- ID
+			# SPAN - need to comput this (-1 for interchr)
+			sv <- cbind(sv, SPAN = abs(sv$start_2 - sv$start_1 + 1))
+			sv$SPAN[sv$chromosome_1 != sv$chromosome_2] <- -1
+			## get breakpoint 2 alt ##
+			sv$alt_2 <- sv[ind.bnd, ][sv$mateID, "alt_1"]
+      sv <- as.data.table(sv)
+      # EVENT - event id
+			#if (sum(rownames(info(header(vcf))) %in% c("SVTYPE")) > 0){
+			#	sv <- cbind(sv, SVTYPE = info(vcf)$SVTYPE)
+			#}			
+			if (sum(rownames(info(header(vcf))) %in% c("HAP_ALLELIC_FRAC")) > 0){
+				sv <- cbind(sv, HAP_ALLELIC_FRAC = info(vcf)$HAP_ALLELIC_FRAC)
+			}
+			if (sum(rownames(info(header(vcf))) %in% c("ALLELIC_FRAC")) > 0){
+				sv <- cbind(sv, ALLELIC_FRAC = info(vcf)$ALLELIC_FRAC)
+			}
+			if (sum(rownames(info(header(vcf))) %in% c("PAIRS")) > 0){
+				sv <- cbind(sv, DR = info(vcf)$PAIRS)
+			}
+			if (sum(rownames(info(header(vcf))) %in% c("SPLIT")) > 0){
+				sv <- cbind(sv, SR = info(vcf)$SPLIT)
+			}
+			if (sum(rownames(info(header(vcf))) %in% c("PVAL")) > 0){
+				sv <- cbind(sv, PVAL = info(vcf)$PVAL)
+			}			
+			if (sum(rownames(info(header(vcf))) %in% c("SOURCE")) > 0){
+				sv <- cbind(sv, SOURCE = info(vcf)$SOURCE)
+			}
+			if (sum(rownames(info(header(vcf))) %in% c("PS")) > 0){
+				sv <- cbind(sv, PS = info(vcf)$PS)
+			}			
+			
+			# GT - 0 if absent, 1 if present
+			if (sum(rownames(geno(header(vcf))) %in% c("GT")) > 0){
+			  sv <- cbind(sv, GT = geno(vcf)$GT)
+			}		
+			
+			## filter by chromosome ##
+			seqlevelsStyle(chrs) <- genomeStyle
+      		sv$chromosome_1 <- mapSeqlevels(sv$chromosome_1, style = genomeStyle)
+      		sv$chromosome_2 <- mapSeqlevels(sv$chromosome_2, style = genomeStyle)
+      		ind <- sv$chromosome_1 %in% chrs & sv$chromosome_2 %in% chrs
+			sv <- sv[ind,]
+			
+			## get orientation ##
+			## check the other alt to see how the current breakpoint is oriented
+			orient1 <- str_match(sv$alt_2, "\\]|\\[") 
+			orient2 <- str_match(sv$alt_1, "\\]|\\[")
+			sv$orient_1[orient1 == "]"] <- "rev"
+			sv$orient_1[orient1 == "["] <- "fwd"
+			sv$orient_2[orient2 == "]"] <- "rev"
+			sv$orient_2[orient2 == "["] <- "fwd"
+			
+			## for phased SVs: DEL, DUP:TANDEM, INV ##
+			sv[alt_1 == "<DEL>", orient_1 := "rev"]; sv[alt_1 == "<DEL>", orient_2 := "fwd"]
+			sv[alt_1 == "<DUP:TANDEM>", orient_1 := "fwd"]; sv[alt_1 == "<DUP:TANDEM>", orient_2 := "rev"]
+			sv[alt_1 == "<INV>", orient_1 := "rev"]; sv[alt_1 == "<INV>", orient_2 := "rev"]
+			
+	}else{
+		message("vcf object is not a CollapsedVCF")
+		sv <- NULL
+	}
+	
+	#sv <- data.table(sv)
+	sv <- sv[!is.na(sv$chromosome_1) & !is.na(sv$chromosome_2), ]
+	sv <- sv[sv$chromosome_1 %in% chrs & sv$chromosome_2 %in% chrs, ]
+	sv <- sv[order(chromosome_1, start_1)]
+	sv <- removeDupSV.LR(sv)
+	return(sv)
+}
+
+getSVfromBEDPE <- function(bedFile, chrs = c(1:22, "X"), skip=0, genomeStyle = "NCBI"){
+	bed <- fread(bedFile, skip=skip)	
+	orient <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^ORIENT=(.+)"))[2] }))
+	type <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^TYPE=(.+)"))[2] }))
+	allelefrac <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^ALLELIC_FRAC=(.+)"))[2] }))
+	hapfrac <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^HAP_ALLELIC_FRAC=(.+)"))[2] }))
+	nsplit <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^NSPLIT=(.+)"))[2] }))
+	npair <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^NPAIRS=(.+)"))[2] }))
+	ps1 <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^PS1=(.+)"))[2] }))
+	ps2 <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^PS2=(.+)"))[2] }))
+	
+	## assign new start1 and start2
+	setnames(bed, c("#chrom1", "start1", "chrom2", "start2", "name"), 
+			c("chromosome_1", "start_1", "chromosome_2", "start_2", "mateID"))
+	bed[, start_1 := floor(start_1 + (stop1 - start_1)/2)]
+	bed[, start_2 := floor(start_2 + (stop2 - start_2)/2)]
+	bed[, c("stop1", "stop2") := NULL]
+
+	## assign allele, hap, type to bed ##
+	bed[, HAP_ALLELIC_FRAC := hapfrac]
+	bed[, ALLELIC_FRAC := allelefrac]
+	bed[, DR := npair]
+	bed[, SR := nsplit]
+	bed[, PS := ps1]; bed[, PS2 := ps2]
+	bed[, SVTYPE := type]
+	bed[, orient := orient]
+	bed[chromosome_1 == chromosome_2, SPAN := start_2 - start_1 + 1]
+	bed[chromosome_1 != chromosome_2, SPAN := -1]
+	
+	## assign orientation to bed ##
+	bed[SVTYPE=="DEL", orient_1 := "rev"]; bed[SVTYPE=="DEL", orient_2 := "fwd"]
+	bed[SVTYPE=="DUP", orient_1 := "fwd"]; bed[SVTYPE=="DUP", orient_2 := "rev"]
+	bed[SVTYPE=="INV", orient_1 := "rev"]; bed[SVTYPE=="INV", orient_2 := "rev"]
+	bed[orient != "..", orient_1 := sapply(substr(orient, 1, 1), switch, "+"="fwd", "-"="rev", "."=NA)]
+	bed[orient != "..", orient_2 := sapply(substr(orient, 2, 2), switch, "+"="fwd", "-"="rev", "."=NA)]
+		
+	chrs <- as.character(chrs)
+	seqlevelsStyle(chrs) <- genomeStyle
+	bed$chromosome_1 <- mapSeqlevels(bed$chromosome_1, style = genomeStyle)
+	bed$chromosome_2 <- mapSeqlevels(bed$chromosome_2, style = genomeStyle)
+    ind <- bed[chromosome_1 %in% chrs & chromosome_2 %in% chrs & !is.na(chromosome_1) & !is.na(chromosome_2), which=TRUE]
+	bed <- bed[ind]
+	bed <- bed[order(chromosome_1, start_1)]
+
+	#bed[, info := NULL]
+	return(copy(bed))
+}
+
+
+##############################################
+########## FIND OVERLAPPING SVS ##############
+##############################################
+# returns index of x that overlaps y
+getOverlapSV <- function(x, y, buffer.x = 100, buffer.y = 100){
+	x <- cbind(SV.id = 1:nrow(x), copy(x))
+
+	x.1 <- copy(x)
+	setnames(x.1, c("chromosome_1"), c("chr"))
+	x.1[, start := start_1 - buffer.x]
+	x.1[, end := start_1 + buffer.x]
+	x.1 <- as(x.1, "GRanges")
+	x.2 <- copy(x)
+	setnames(x.2, c("chromosome_2"), c("chr"))
+	x.2[, start := start_2 - buffer.x]
+	x.2[, end := start_2 + buffer.x]
+	x.2 <- as(x.2, "GRanges")
+	
+	y.1 <- copy(y)
+	setnames(y.1, c("chromosome_1"), c("chr"))
+	y.1[, start := start_1 - buffer.y]
+	y.1[, end := start_1 + buffer.y]
+	y.1 <- as(y.1, "GRanges")
+	y.2 <- copy(y)
+	setnames(y.2, c("chromosome_2"), c("chr"))
+	y.2[, start := start_2 - buffer.y]
+	y.2[, end := start_2 + buffer.y]
+	y.2 <- as(y.2, "GRanges")
+
+	suppressWarnings(hits1 <- findOverlaps(query = x.1, subject = y.1))
+	suppressWarnings(hits2 <- findOverlaps(query = x.2, subject = y.2))
+	
+	overlapInd <- unique(cbind(c(queryHits(hits1), queryHits(hits2)), c(subjectHits(hits1), subjectHits(hits2))))
+	overlap.sv <- cbind(x = x[overlapInd[, 1]], y = y[overlapInd[, 2]])
+	overlap.sv[, overlap.dist.1 := abs(x.start_1 - y.start_1)]
+	overlap.sv[, overlap.dist.2 := abs(x.start_2 - y.start_2)]
+	overlap.sv <- overlap.sv[overlap.dist.1 <= buffer.x & overlap.dist.2 <= buffer.x]
+	
+	x.SV.id <- overlap.sv[, x.SV.id]
+	return(list(overlap.ind = x.SV.id, overlap.sv=overlap.sv))	
+}
+
+##########################################
+##### remove duplicate breakpoints #######
+##########################################
+removeDupSV.LR <- function(sv){
+	bkpts <- unique(str_extract(sv$mateID, "(\\d+)"))
+	keepInd <- NULL
+	for (i in 1:length(bkpts)){
+	  ind <- which(grepl(paste0("call_", bkpts[i], "\\_|call_",bkpts[i], "$"), sv$mateID)) # _47_ | _47$
+	  keepInd <- c(keepInd, ind[order(sv[ind, start_1]) == 1])
+	}
+	sv <- sv[keepInd, ] ## keep 1st mate in pair 
+#	 }
+	return(sv)
+}
 

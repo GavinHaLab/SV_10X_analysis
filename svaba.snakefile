@@ -56,7 +56,7 @@ rule barcodeRescue:
 		windowSize=config["bxRescue_windowSize"],
 		minRead=config["bxRescue_minReadOverlapSupport"],
 		mem=config["bxRescue_mem"],
-		runtime=config["std_runtime"],
+		runtime=config["bxRescue_runtime"],
 		pe=config["std_numCores"]		
 	log:
 		"logs/barcodeRescue/{tumor}.bxOverlap.log"

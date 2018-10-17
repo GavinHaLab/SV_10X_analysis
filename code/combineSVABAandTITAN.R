@@ -14,12 +14,14 @@ option_list <- list(
 	make_option(c("--svabaVCF"), type="character", help = "Path to SVABA barcode rescue VCF file."),
 	make_option(c("--titanBinFile"), type="character", help = "Path to TITAN titan.txt output file."),
 	make_option(c("--titanSegFile"), type="character", help = "Path to TITAN segs.txt output file."),
+	make_option(c("--LRsvFile"), type="character", help = "Path to Long Ranger SV call files."),
 	make_option(c("--LRsummaryFile"), type="character", help = "Path to Long Ranger summary.csv file."),
 	make_option(c("--genomeBuild"), type="character", default="hg19", help = "Genome build: hg19 or hg38. Default [%default]"),
 	make_option(c("--genomeStyle"), type = "character", default = "NCBI", help = "NCBI or UCSC chromosome naming convention; use UCSC if desired output is to have \"chr\" string. [Default: %default]"),
 	make_option(c("--chrs"), type = "character", default = "c(1:22, 'X')", help = "Chromosomes to analyze; string [Default: %default"),
 	make_option(c("--outDir"), type="character", help="Path to output directory."),
 	make_option(c("--outputSVFile"), type="character", help="Path to output SV file with new annotations."),
+	make_option(c("--outputBedpeFile"), type="character", help="Path to output SV file with new annotations as BEDPE."),
 	make_option(c("--outputCNFile"), type="character", help="Path to output CNA file with new annotations.")
 )
 
@@ -30,7 +32,7 @@ library(stringr)
 library(ggplot2)
 library(plyr)
 
-options(stringsAsFactors=F, width=165)
+options(stringsAsFactors=F, width=165, scipen=999)
 
 parseobj <- OptionParser(option_list=option_list, usage = "usage: Rscript %prog [options]")
 opt <- parse_args(parseobj)
@@ -41,19 +43,22 @@ source(opt$svaba_funcs)
 source(opt$tenX_funcs)
 
 tumId <- opt$id
-tumBamFile <- opt$tumBam
 svabaVCF <- opt$svabaVCF
 cnFile <- opt$titanBinFile
 segFile <- opt$titanSegFile
 LRsummaryFile <- opt$LRsummaryFile
+LRsvFile <- opt$LRsvFile
 outputSVFile <- opt$outputSVFile
 outputCNFile <- opt$outputCNFile
+outputBedpeFile <- opt$outputBedpeFile
 outDir <- opt$outDir
 dir.create(outDir)
 outImage <- paste0(outDir, "/", tumId, ".RData")
 genomeBuild <- opt$genomeBuild
 genomeStyle <- opt$genomeStyle
 chrs <- as.character(eval(parse(text = opt$chrs)))
+
+save.image(outImage)
 
 seqinfo <- Seqinfo(genome=genomeBuild)
 seqlevelsStyle(chrs) <- genomeStyle
@@ -111,6 +116,7 @@ save.image(outImage)
 ######################################
 ############# LOAD SVABA #############
 ######################################
+message("Loading svaba results: ", svabaVCF)
 svaba <- loadVCFtoDataTableByChromosome(svabaVCF, chr=chrs, genomeStyle=genomeStyle, minSPAN=minSPAN, minSPANBX=minSPANBX, minBXOL=minBXOL, maxBXOL=maxBXOL, minBSDsupport=minBSDsupport, dupSV.bpDiff=dupSV.bpDiff)
 svaba <- cbind(Sample = tumId, SV.id = 1:nrow(svaba), svaba)
 ## TEMPORARY FIX BECAUSE BXOL IS A UNIQUE OF PROPER PAIRS AND SUPPORT BUT WE WANT ONLY PROPER PAIRS
@@ -122,7 +128,6 @@ fitResults <- computeBXOLbinomialTest(svaba, minBXOL=minBXOL, minSPAN=minSPAN, m
 		se.level=se.level, loess.span=loess.span, filter.quantile=filter.quantile)
 svaba <- fitResults$sv
 svaba[support=="BX", BXOL.pval := pmax(BXOL.pval.1, BXOL.pval.2)]
-
 
 outPlot <- paste0(outDir, "/", tumId, "_svabaSVBXOLbyLengthFit.pdf")
 ggsave(fitResults$gp, file=outPlot)
@@ -140,8 +145,12 @@ indFBI <- svaba[support=="SVABA" &
 			which=TRUE]
 # use minSPAN or maxFBISPAN
 indSVABA <- svaba[support=="SVABA" & ((SPAN >= minSPAN ) | SPAN == -1), which=TRUE]
+save.image(outImage)
 
-# overlap copy number
+###########################################
+###  COPY NUMBER RESCUE OF SVABA EVENTS ###
+###########################################
+message("Copy number rescue for svaba results...")
 segs <- fread(segFile)
 segs <- cbind(SEG.id = 1:nrow(segs), segs)	
 sv.seg <- getSegSVoverlap(segs, svaba, event.cn=unique(segs$Corrected_Call), buffer=cn.buffer)
@@ -162,17 +171,85 @@ svaba[!SV.id %in% c(indBX, indSVABA, indFBI, indCN, indCN.interChr), support := 
 svabaAll <- copy(svaba); setkey(svabaAll, SV.id)
 svabaAll[, Mean.Molecule.Length := meanLength]
 svaba <- svaba[!is.na(support)]
-sv <- copy(svaba)
+save.image(outImage)
 
+######################################
+########### LOAD LONGRANGER ##########
+######################################
+message("Loading Long Ranger results ", LRsvFile)
+lr <- fread(LRsvFile)
+lr <- lr[SOMATIC==TRUE]
+lr[, support := "SOMATIC"]
+#lr <- removeIdenticalSV(lr)
+lr <- sortBkptPairOrder(lr)
 
+#################################################
+########### COMBINE SVABA + LONGRANGER ##########
+#################################################
+## find overlap between SVABA and LONGRANGER ##
+# assumes breakpoint 1 is always upstream of breakpoint 2 for intra chromosome events #
+svaba.1 <- copy(svaba) #breakpoint 1
+setnames(svaba.1, c("chromosome_1"), c("chr"))
+svaba.1[, start := start_1 - sv.buffer]; svaba.1[, end := start_1 + sv.buffer]
+svaba.1 <- as(svaba.1, "GRanges")
+svaba.2 <- copy(svaba) #breakpoint 2
+setnames(svaba.2, c("chromosome_2"), c("chr"))
+svaba.2[, start := start_2 - sv.buffer]; svaba.2[, end := start_2 + sv.buffer]
+svaba.2 <- as(svaba.2, "GRanges")
+
+lr.1 <- copy(lr)
+setnames(lr.1, c("chromosome_1"), c("chr"))
+lr.1[, start := start_1 - sv.buffer]; lr.1[, end := start_1 + sv.buffer]
+lr.1 <- as(lr.1, "GRanges")
+lr.2 <- copy(lr)
+setnames(lr.2, c("chromosome_2"), c("chr"))
+lr.2[, start := start_2 - sv.buffer]; lr.2[, end := start_2 + sv.buffer]
+lr.2 <- as(lr.2, "GRanges")
+# overlap of first breakpoint #
+hits.svaba.lr.1 <- findOverlaps(query=svaba.1, subject=lr.1)
+hits.svaba.lr.2 <- findOverlaps(query=svaba.2, subject=lr.2)
+
+# svaba + lr #
+svaba.lr.ind <- rbind(data.frame(hits.svaba.lr.1), data.frame(hits.svaba.lr.2))
+svaba.lr.ind <- svaba.lr.ind[duplicated(svaba.lr.ind), ]
+svaba[svaba.lr.ind$queryHits, overlap.LONGRANGER.id := lr[svaba.lr.ind$subjectHits, SV.id]]
+lr[svaba.lr.ind$subjectHits, overlap.SVABA.id := svaba[svaba.lr.ind$queryHits, SV.id]]
+svaba[, overlap.SVABA.id := SV.id]
+lr[, overlap.LONGRANGER.id := SV.id]
+
+## combine to save data.table ##
+keepColNames <- c("Sample", "SV.id", "chromosome_1", "start_1", "chromosome_2", "start_2", "alt_1", "alt_2", "FILTER", "SPAN", "orient_1", "orient_2", "support", "overlap.SVABA.id", "overlap.LONGRANGER.id")
+bothSV <- rbind(cbind(Tool="SVABA", svaba[, keepColNames, with=F]),
+							  cbind(Tool="LONGRANGER", lr[, keepColNames[-c(7,8)], with=F]), fill=T)
+#bothSV <- cbind(SV.combined.id = 1:nrow(bothSV), bothSV, Mean.Molecule.Length = meanLength)
+bothSV[, type := getSVType(bothSV, minColSPAN = minSPAN, minTrans = minTrans)]#, maxInvSPAN = maxInvSPAN, maxFBISPAN = maxFBISPAN)]
+
+## get uniq events - shorten the SV list ##
+bothSV.uniq <- keepUniqSVcall(bothSV, "SVABA")
+bothSV.all <- copy(bothSV)
+bothSV.uniq <- cbind(SV.combined.id = 1:nrow(bothSV.uniq), bothSV.uniq, Mean.Molecule.Length = meanLength)
+
+## output to files ##
+outFile <- paste0(outDir, "/", tumId, "_svaba.txt")
+write.table(svaba, file=outFile, col.names=T, row.names=F, quote=F, sep="\t")
+outFile <- paste0(outDir, "/", tumId, "_longranger.txt")
+write.table(lr, file=outFile, col.names=T, row.names=F, quote=F, sep="\t")
+outFile <- paste0(outDir, "/", tumId, "_combinedSVuniq.txt")
+write.table(bothSV, file=outFile, col.names=T, row.names=F, quote=F, sep="\t")
+
+######################################
+########### ANNOTATE WITH CN ##########
+######################################
+message("Annotating SVs with copy number...")
 ## annotate segment CN overlapping exactly at breakpoints
+sv <- copy(bothSV.uniq)
 annot <- annotateSVwithCN(sv, segs, cnColToAnnotate = "Corrected_Copy_Number")
 annotMaj <- annotateSVwithCN(sv, segs, cnColToAnnotate = "MajorCN")
 annotMin <- annotateSVwithCN(sv, segs, cnColToAnnotate = "MinorCN")
 sv[annot$ind1, Copy_Number_1 := annot$annot1]
 sv[annot$ind2, Copy_Number_2 := annot$annot2]
 sv[annotMaj$ind1, MajorCN_1 := annotMaj$annot1]
-sv[annotMin$ind1, MinorCN_1 := annotMin$annot1]	
+sv[annotMin$ind1, MinorCN_1 := annotMin$annot1]
 sv[annotMaj$ind2, MajorCN_2 := annotMaj$annot2]
 sv[annotMin$ind2, MinorCN_2 := annotMin$annot2]
 
@@ -199,18 +276,17 @@ annot <- annotateSVbetweenBkptsWithCN(sv, cn, segs, buffer = seg.buffer,
 sv[annot$ind, Copy_Number_1_2_mean := round(annot$annot.cn$cn)]
 sv[annot$ind, Copy_Number_1_2_numSegs := annot$annot.seg$NumSeg]
 
-sv <- cbind(SV.combined.id = 1:nrow(sv), sv, Mean.Molecule.Length = meanLength)
 sv[, type := getSVType(sv, minColSPAN = minSPAN, minTrans = minTrans)]
-sv[, Tool := "SVABA"]
+save.image(outImage)
 
 ########################################################################
 ######################### SV CLASSIFICATIONS ###########################
 ########################################################################
-if (segs[Chromosome!="X", median(Corrected_Copy_Number)] == 2 || 
-		segs[Chromosome!="X", median(Corrected_Copy_Number)] == 3){
+if (segs[!grepl("X", Chromosome), median(Corrected_Copy_Number, na.rm=T)] == 2 || 
+		segs[!grepl("X", Chromosome), median(Corrected_Copy_Number, na.rm=T)] == 3){
 	del.cn <- c("HOMD", "DLOH", "NLOH", "ALOH")
 	neut.cn <- c("NEUT", "HET")
-}else if (segs[Chromosome!="X", median(Corrected_Copy_Number)] >= 4){
+}else if (segs[!grepl("X", Chromosome), median(Corrected_Copy_Number, na.rm=T)] >= 4){
 	del.cn <- c("HOMD", "DLOH", "NLOH", "ALOH", "GAIN")
 	neut.cn <- c("NEUT", "HET", "BCNA")
 }
@@ -225,7 +301,9 @@ save.image(outImage)
 #consensus.sv.id <- sv[which(rowSums(!is.na(sv[, .(overlap.SVABA.id, overlap.GROCSVS.id, overlap.LONGRANGER.id)])) >=2), SV.combined.id]
 consensus.sv.id <- sv[, SV.combined.id]
 
-## interchromosomal translocations - balanced vs unbalanced
+########################################################################
+## interchromosomal translocations - balanced vs unbalanced ##
+########################################################################
 #interchr.seg.sv <- getSegSVoverlap(segs, sv, event.cn=neut.cn, buffer=cn.buffer, interChr = TRUE)
 interchrUBal.cn.sv <- sv[type == "InterChr" & 
 		((Copy_Number_1_prev != Copy_Number_1_next) | (Copy_Number_2_prev != Copy_Number_2_next))]
@@ -244,7 +322,9 @@ if (nrow(interchrUBal.cn.sv) > 0){
 	sv[type == "InterChr" & !SV.combined.id %in% consensus.sv.id & (support == "BX"), CN_overlap_type := NA] 
 }
 
-## simple deletions 
+########################################################################
+## simple deletions ##
+########################################################################
 # use segment overlap and
 # bin-level adjacent CN: b1.prev > b1.next & b2.prev < b2.next & meanCN between b1-b2 < b1.prev/b2.next 
 del.cn.sv <- sv[type == "Deletion" & 
@@ -269,7 +349,9 @@ if (!is.null(del.sv)){
 }
 sv[is.na(CN_overlap_type) & type=="Deletion" & SPAN > minSPAN & SPAN < cn.buffer & Copy_Number_1_2_numSegs <= 2, CN_overlap_type := "Deletion"]
 
+########################################################################
 ## simple tandem duplications ##
+########################################################################
 # use segment overlap and breakpoint CN
 gain.cn.sv <- sv[type == "Duplication" & 
 	((Copy_Number_1_prev < Copy_Number_1_next | Copy_Number_2_prev > Copy_Number_2_next) &
@@ -300,7 +382,9 @@ if (!is.null(gain.sv)){
 #sv[is.na(CN_overlap_type) & type=="Duplication" & Tool != "LONGRANGER" & SPAN > minSPAN & SPAN < cn.buffer & Copy_Number_1_2_numSegs <= 2, CN_overlap_type := "TandemDup"]
 sv[is.na(CN_overlap_type) & type=="Duplication" & SPAN > minSPAN & SPAN < cn.buffer & Copy_Number_1_2_numSegs <= 2, CN_overlap_type := "TandemDup"]
 
-## unbalanced inversions
+########################################################################
+## unbalanced inversions ##
+########################################################################
 inv.cn.sv <- sv[type == "Inversion" & SPAN >= minInvSPAN & SPAN <= maxInvSPAN &
 	((Copy_Number_1_prev != Copy_Number_1_2_mean | Copy_Number_2_next != Copy_Number_1_2_mean) |
 	(Copy_Number_1_prev != Copy_Number_1_next | Copy_Number_2_prev != Copy_Number_2_next))]
@@ -321,7 +405,9 @@ sv[SV.combined.id %in% inv.cn.sv$SV.combined.id, CN_overlap_type := "Inversion-U
 #	segs[SEG.id %in% inv.seg.sv.id$SEG.id, SV.overlap.id := inv.seg.sv.id$V1]
 #}
 
-## balanced inversions
+########################################################################
+## balanced inversions ##
+########################################################################
 inv.cn.sv <- sv[type == "Inversion" & SPAN >= minInvSPAN & SPAN <= maxInvSPAN &
 	((Copy_Number_1_prev == Copy_Number_1_2_mean & Copy_Number_2_next == Copy_Number_1_2_mean) |
 	(Copy_Number_1_prev == Copy_Number_1_next & Copy_Number_2_prev == Copy_Number_2_next))]
@@ -342,7 +428,9 @@ sv[SV.combined.id %in% inv.cn.sv$SV.combined.id, CN_overlap_type := "Inversion-B
 #	segs[SEG.id %in% inv.seg.sv.id$SEG.id, SV.overlap.id := inv.seg.sv.id$V1]
 #}
 
-## foldback inversions
+########################################################################
+## foldback inversions ##
+########################################################################
 inv.cn.sv <- sv[type == "Inversion" & (SPAN < maxFBISPAN) &
 	(Copy_Number_1_prev != Copy_Number_2_next | Copy_Number_1 != Copy_Number_2) &
 	(Copy_Number_1 / Ploidy.medianCN * 2 > minFBIcn | Copy_Number_2 / Ploidy.medianCN * 2 > minFBIcn)]
@@ -351,7 +439,9 @@ sv[SV.combined.id %in% inv.cn.sv$SV.combined.id, CN_overlap_type := "Inversion-F
 #sv[type == "FoldBackInv-H", CN_overlap_type := "FoldBackInv-H"]
 #sv[type == "FoldBackInv-T", CN_overlap_type := "FoldBackInv-T"]
 
-## Rest: balanced rearrangements - intra-chr SVs 
+########################################################################
+## Rest: balanced rearrangements - intra-chr SVs ##
+########################################################################
 sv[is.na(CN_overlap_type) & type=="Inversion" & SPAN >= minInvSPAN &
 	((Copy_Number_1_prev == Copy_Number_1_2_mean & Copy_Number_2_next == Copy_Number_1_2_mean) |
 	(Copy_Number_1_prev == Copy_Number_1_next & Copy_Number_2_prev == Copy_Number_2_next)),
@@ -361,12 +451,15 @@ sv[is.na(CN_overlap_type) & type=="Duplication" & Tool == "LONGRANGER" & SPAN > 
 ## Rest: unbalanced rearrangements ##
 sv[is.na(CN_overlap_type) & !is.na(type) & SPAN >= minInvSPAN, CN_overlap_type := "Unbalanced"]
 
-
-## filter short inversions and deletions (longranger & svaba)
+########################################################################
+## filter short inversions and deletions (longranger & svaba) ##
+########################################################################
 #sv <- sv[!is.na(CN_overlap_type) | !is.na(overlap.GROCSVS.id)]
 sv <- sv[!is.na(CN_overlap_type)]
 
-## inverted duplications (templated insertions?)
+########################################################################
+## inverted duplications (templated insertions?) ##
+########################################################################
 # use segment overlap and 
 # bin-level adjacent CN: b1.prev < b2.next & b2.prev > b2.next & meanCN between b1-b2 > b1.prev/b2.next
 #sv.id.toUse <- sv[is.na(CN_overlap_type), SV.combined.id]
@@ -394,8 +487,28 @@ sv <- sv[!is.na(CN_overlap_type)]
 #	segs[SEG.id %in% gain.seg.sv.id$SEG.id, SV.overlap.id := gain.seg.sv.id$V1]
 #}
 
-## output files
+########################################################################
+## output files ##
+########################################################################
 save.image(outImage)
+#sort by chr
+sv$chromosome_1 = factor(sv$chromosome_1, levels=chrs)
+sv$chromosome_2 = factor(sv$chromosome_2, levels=chrs)
+sv <- sv[order(chromosome_1, chromosome_2, start_1, start_2)]
 write.table(sv, file=outputSVFile, col.names=T, row.names=F, quote=F, sep="\t")
 write.table(segs, file=outputCNFile, col.names=T, row.names=F, quote=F, sep="\t")
+
+
+########################################################################
+## output bedpe files ##
+########################################################################
+sv.out <- copy(sv)
+sv.out[, c("chrom1", "start1", "end1", "chrom2", "start2", "end2") := .(chromosome_1, start_1, start_1, chromosome_2, start_2, start_2)]
+sv.out[, strand1 := { strand = rep("+", .N); strand[orient_1=="fwd"] = "-"; strand }]
+sv.out[, strand2 := { strand = rep("+", .N); strand[orient_2=="fwd"] = "-"; strand }]
+sv.out[, name := "."]; sv.out[, score := "."]
+colNameOrder <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2", "name", "score", "strand1", "strand2")
+setcolorder(sv.out, c(colNameOrder, colnames(sv.out)[!colnames(sv.out) %in% colNameOrder]))
+write.table(sv.out, file = outputBedpeFile, col.names=T, row.names=F, quote=F, sep="\t", na=".")
+
 

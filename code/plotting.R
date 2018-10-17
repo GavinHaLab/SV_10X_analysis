@@ -264,7 +264,7 @@ logRbasedCN <- function(x, purity, ploidyT, cn = 2){
 }
 
 
-## modified to work for combine_TITAN_ICHOR/*titan_ichor_cn.txt
+## modified to work for combine_TITAN_ICHOR/titan_ichor_cn.txt
 findNearestLogR <- function(x, y, buffer = 1e6){
 	y1 <- 0; y2 <- 0
 	#y <- na.omit(y)
@@ -281,10 +281,12 @@ findNearestLogR <- function(x, y, buffer = 1e6){
 	  #indClose <- ind[which.min(c(abs(y[ind[1], "end"]-x[["start_1"]]), abs(y[ind[2], "start"]-x[["start_1"]])))]
 	  #y1 <- y[indClose, "copy"]
 		#y1 <- max(y[tail(which(bin1Ind), 1):(tail(which(bin1Ind), 1)+1), "copy"], na.rm = TRUE)
-		if (x[["orient_1"]] == "rev"){ # region to left of breakpoint 
+	if (x[["orient_1"]] == "rev"){ # region to left of breakpoint 
       y1 <- y[max(ind - 1, 1), "LogRatio"]
+      #y1 <- tail(na.omit(y[max((ind-10):ind), "LogRatio"]), 1)
     }else if (x[["orient_1"]] == "fwd"){  # region to right of breakpoint 
       y1 <- y[min(ind + 1, length(bin1Ind)), "LogRatio"]
+      #y1 <- head(na.omit(y[max(ind:(ind+10)), "LogRatio"]), 1)
     }
 	}
 	if (sum(bin2Ind, na.rm=T) > 0){
@@ -299,6 +301,8 @@ findNearestLogR <- function(x, y, buffer = 1e6){
       y2 <- y[min(ind + 1, length(bin1Ind)), "LogRatio"]
     }
 	}
+	if (is.na(y1)) { y1 <- 0 }
+	if (is.na(y2)) { y2 <- 0 }
 	return(c(y1, y2))
 }
 

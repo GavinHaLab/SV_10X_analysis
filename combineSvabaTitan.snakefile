@@ -16,16 +16,42 @@ rule all:
   input: 
   	expand("results/combineSVABAandTITAN/{tumor}/{tumor}.svabaTitan.sv.txt", tumor=config["pairings"]),
   	expand("results/combineSVABAandTITAN/{tumor}/{tumor}.svabaTitan.cn.txt", tumor=config["pairings"]),
+  	expand("results/combineSVABAandTITAN/{tumor}/{tumor}.svabaTitan.sv.bedpe", tumor=config["pairings"]),
+  	expand("results/LongRangerSomaticSV/{tumor}/{tumor}.LR.somatic.sv.txt", tumor=config["pairings"]),
   	expand("results/plotSVABAandTITAN/{tumor}", tumor=config["pairings"])
+
+rule getLongRangerSomaticSV:
+	input:
+		tumSVFile=lambda wildcards: getLRFullPath(config["samples"][wildcards.tumor], "large_sv_calls.bedpe"),
+		normSVFile=lambda wildcards: getLRFullPath(config["samples"][config["pairings"][wildcards.tumor]], "large_sv_calls.bedpe"),
+		tumDelFile=lambda wildcards: getLRFullPath(config["samples"][wildcards.tumor], "dels.vcf.gz"),
+		normDelFile=lambda wildcards: getLRFullPath(config["samples"][config["pairings"][wildcards.tumor]], "dels.vcf.gz")
+	output:
+		outputSVFile="results/LongRangerSomaticSV/{tumor}/{tumor}.LR.somatic.sv.txt"
+	params:
+		getLRscript=config["getLRsomaticSV_script"],
+		tenXfuncs=config["tenX_funcs"],
+		genomeBuild=config["genomeBuild"],
+		genomeStyle=config["genomeStyle"],
+		chrs=config["chrs"],
+		mem=config["std_mem"],
+		runtime=config["std_runtime"],
+		pe=config["std_numCores"]
+	log:
+		"logs/LongRangerSomaticSV/{tumor}.log"
+	shell:
+		"Rscript {params.getLRscript} --id {wildcards.tumor} --tenX_funcs {params.tenXfuncs} --tumLargeSVFile {input.tumSVFile} --normLargeSVFile {input.normSVFile} --tumDeletionFile {input.tumDelFile} --normDeletionFile {input.normDelFile} --genomeBuild {params.genomeBuild} --genomeStyle {params.genomeStyle} --chrs \"{params.chrs}\" --outDir results/LongRangerSomaticSV/{wildcards.tumor}/ --outputSVFile {output.outputSVFile} > {log} 2> {log}"
 
 rule combineSVABAandTITAN:
 	input:
 		LRsummaryFile=lambda wildcards: getLRFullPath(config["samples"][wildcards.tumor], "summary.csv"),
 		svabaVCF="results/barcodeRescue/{tumor}.bxOverlap.vcf",
 		titanBinFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".titan.ichor.cna.txt"),
-		titanSegFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".titan.ichor.seg.noSNPs.txt")
+		titanSegFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".titan.ichor.seg.noSNPs.txt"),
+		LRsvFile="results/LongRangerSomaticSV/{tumor}/{tumor}.LR.somatic.sv.txt"
 	output:
 		outputSVFile="results/combineSVABAandTITAN/{tumor}/{tumor}.svabaTitan.sv.txt",
+		outputBedpeFile="results/combineSVABAandTITAN/{tumor}/{tumor}.svabaTitan.sv.bedpe",
 		outputCNFile="results/combineSVABAandTITAN/{tumor}/{tumor}.svabaTitan.cn.txt"
 	params:
 		combineSVCNscript=config["combineSVCN_script"],
@@ -44,7 +70,7 @@ rule combineSVABAandTITAN:
 	log:
 		"logs/combineSVABAandTITAN/{tumor}.log"
 	shell:
-		"Rscript {params.combineSVCNscript} --id {wildcards.tumor} --tenX_funcs {params.tenXfuncs} --svaba_funcs {params.svabafuncs} --svabaVCF {input.svabaVCF} --titanBinFile {input.titanBinFile} --titanSegFile {input.titanSegFile} --LRsummaryFile {input.LRsummaryFile} --genomeBuild {params.genomeBuild} --genomeStyle {params.genomeStyle} --chrs \"{params.chrs}\" --outDir results/combineSVABAandTITAN/{wildcards.tumor}/ --outputSVFile {output.outputSVFile} --outputCNFile {output.outputCNFile} > {log} 2> {log}"
+		"Rscript {params.combineSVCNscript} --id {wildcards.tumor} --tenX_funcs {params.tenXfuncs} --svaba_funcs {params.svabafuncs} --svabaVCF {input.svabaVCF} --titanBinFile {input.titanBinFile} --titanSegFile {input.titanSegFile} --LRsummaryFile {input.LRsummaryFile} --LRsvFile {input.LRsvFile} --genomeBuild {params.genomeBuild} --genomeStyle {params.genomeStyle} --chrs \"{params.chrs}\" --outDir results/combineSVABAandTITAN/{wildcards.tumor}/ --outputSVFile {output.outputSVFile} --outputCNFile {output.outputCNFile} --outputBedpeFile {output.outputBedpeFile} > {log} 2> {log}"
 		
 rule plotSVABAandTITAN:
 	input:

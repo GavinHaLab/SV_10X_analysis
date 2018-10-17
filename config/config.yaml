@@ -8,6 +8,7 @@ svaba_funcs:  code/svaba_utils.R
 plot_funcs:  code/plotting.R
 bxRescue_script:  code/barCodeOverlap.R
 combineSVCN_script:  code/combineSVABAandTITAN.R
+getLRsomaticSV_script:  code/getLongRangerSomaticSV.R
 plotSVCN_script:  code/plotTitanSvaba.R
 
 ## path to TITAN snakemake root  ##
@@ -40,7 +41,7 @@ svaba_runtime:  "300:00:00"
 svaba_numThreads:  4
 svaba_numCores: -pe smp 4 -binding linear:4  # should match svaba_numThreads
 
-## Barcode Rescue parameters ##
+## Barcode Rescue settings ##
 bxRescue_minMapQ:  20
 bxRescue_minLength:  10000
 bxRescue_windowSize:  1000

@@ -215,6 +215,9 @@ removeIdenticalSV <- function(sv){
 }
 
 sortBkptPairOrder <- function(sv.unsort, chrs = c(1:22, "X", "Y")){
+  genomeStyle <- seqlevelsStyle(sv.unsort$chromosome_1)[1]
+  chrs <- as.character(chrs)
+  seqlevelsStyle(chrs) <- genomeStyle
   ## interchr
   sv <- copy(sv.unsort)
   sv[, SV.id := 1:nrow(sv)]
@@ -1455,7 +1458,7 @@ plotCNlogRByChr <- function(dataIn, colName = "copy", segs=NULL, chr=NULL, ploid
     }
 }
 
-## modified to work for combine_TITAN_ICHOR/*titan_ichor_cn.txt
+## modified to work for combine_TITAN_ICHOR/titan_ichor_cn.txt
 findNearestLogR <- function(x, y, buffer = 1e6){
 	y1 <- 0; y2 <- 0
 	#y <- na.omit(y)
