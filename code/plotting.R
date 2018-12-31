@@ -162,14 +162,14 @@ plotTitanIchorCNA <- function(dataIn, param = NULL, colName = "LogRatio", callCo
   
   if (!is.null(chr)){
     for (i in chr){
-      dataByChr <- dataIn[dataIn[,"Chr"]==as.character(i),]
+      dataByChr <- dataIn[Chr==as.character(i),]
        ## set y axis labels as either integer or logR copy number
       #avgTumPloidy <- round(ploidyT)
  
       zero <- 0.5  
       cn <- c(0, 1, 2, 4, `^`(2, 3:(yrange[2]+1)))
       #ploidyToUse <- ploidyS
-      if (i == "X"){
+      if (i == "X" | i=="chrX"){
         normCN <- 1
         zero <- 0.25
         cn <- c(0, 1, 2, 4, `^`(2, 3:(yrange[2]+1)))
@@ -180,10 +180,10 @@ plotTitanIchorCNA <- function(dataIn, param = NULL, colName = "LogRatio", callCo
         yrange[1] <- y.ticks[1]    
         ylab <- "Copy Number"
         #dataByChr[, colName] <- log2(logRbasedCN(dataByChr[, colName], purity, ploidyT, cn=normCN))
-        dataByChr[, colName] <- log2(dataByChr[, colName])
+        dataByChr[, eval(colName)] <- log2(dataByChr[, get(colName)])
         if (!is.null(segs)){
-      		segs[, colName] <- log2(segs[, colName])# + log2(ploidyS / 2)
-    		}
+      		segs[, get(colName)] <- log2(segs[, get(colName)])# + log2(ploidyS / 2)
+    	}
         centreLine <- log2(normCN)
       }else{      
       	#dataByChr[, colName] <- dataByChr[, colName] + log2(ploidyS / 2)
@@ -198,25 +198,30 @@ plotTitanIchorCNA <- function(dataIn, param = NULL, colName = "LogRatio", callCo
       #if (outfile!=""){ pdf(outfile,width=10,height=6) }
       par(mar=c(spacing,8,4,2))
       #par(xpd=NA)
-      coord <- (as.numeric(dataByChr[,"End"]) + as.numeric(dataByChr[,"Start"]))/2
+      coord <- (as.numeric(dataByChr[, End]) + as.numeric(dataByChr[, Start]))/2
       if (is.null(xlim)){
-        xlim <- c(1,as.numeric(dataByChr[dim(dataByChr)[1],"Start"]))
+        xlim <- c(1,as.numeric(dataByChr[.N, "Start"]))
         xaxt <- "n"
       }
       if (is.null(plot.title)){
         plot.title <- paste("Chromosome ",i,sep="")
       }
       ## plot logR for bins ##
-      plot(coord,as.numeric(dataByChr[, colName]),col=cnCol[dataByChr[,callColName]],
+      plot(coord,as.numeric(dataByChr[, get(colName)]),col=cnCol[dataByChr[, get(callColName)]],
            pch=16, ylim=yrange, yaxt="n",
            xlim=xlim, xaxt = xaxt, xlab="",ylab=ylab,
            cex.lab=1.5,cex.axis=1.5, cex=cex,las=1)
       axis(2, at=y.ticks, labels=cn, las=2, cex.axis=1.5)
       title(plot.title, line = 1.25, xpd=NA, cex.main=1.5)
       ## plot centre line ##
-      lines(c(1,tail(na.omit(dataByChr[,3]), 1)),rep(centreLine,2),type="l",col="grey",lwd=0.75)
+      if (grepl("X", i)){
+      	endCoord <- dataByChr[.N, End]
+      }else{
+      	endCoord <- dataByChr[.N, Position]
+      }
+      lines(c(1,endCoord),rep(centreLine,2),type="l",col="grey",lwd=0.75)
       if (!is.null(segs)){
-        segsByChr <- segs[segs[,"Chromosome"]==as.character(i),,drop=FALSE]
+        segsByChr <- as.data.frame(segs[segs[, Chromosome]==as.character(i),,drop=FALSE])
         #ind <- segsByChr$subclone.status == FALSE
         apply(segsByChr, 1, function(x){
           lines(x[c("Start","End")], rep(x[colName], 2), col = cnCol[x[callColName]], lwd = 3)
@@ -241,13 +246,13 @@ plotTitanIchorCNA <- function(dataIn, param = NULL, colName = "LogRatio", callCo
         colnames(geneAnnot) <- c("Gene","Chr","Start","Stop")
         geneAnnot <- geneAnnot[geneAnnot[,"Chr"]==chr,]
         if (nrow(geneAnnot) > 0){
-        for (g in 1:dim(geneAnnot)[1]){
+        for (g in 1:nrow(geneAnnot)){
           print(geneAnnot[g,"Gene"])
           abline(v=as.numeric(geneAnnot[g,"Start"]),col="black",lty=3,xpd=F)
           abline(v=as.numeric(geneAnnot[g,"Stop"]),col="black",lty=3,xpd=F)			
           atP <- (as.numeric(geneAnnot[g,"Stop"]) - as.numeric(geneAnnot[g,"Start"]))/2 + as.numeric(geneAnnot[g,"Start"])
-          if (atP < dataByChr[1,"Start"]){ atP <- dataByChr[1,"Start"] }
-          else if (atP > dataByChr[dim(dataByChr)[1],"Start"]){ atP <- dataByChr[dim(dataByChr)[1],"Start"] }
+          if (atP < dataByChr[1, Start]){ atP <- dataByChr[1, Start] }
+          else if (atP > dataByChr[.N, Start]){ atP <- dataByChr[.N, Start] }
           mtext(geneAnnot[g,"Gene"],side=3,line=0,at=atP,cex=gene.cex)
           }
         }
@@ -305,6 +310,309 @@ findNearestLogR <- function(x, y, buffer = 1e6){
 	if (is.na(y2)) { y2 <- 0 }
 	return(c(y1, y2))
 }
+
+plotIchorCNA <- function(dataIn, param = NULL, colName = "copy", segs=NULL, chr=NULL, ploidy = NULL, geneAnnot=NULL, yrange=c(-4,6), yaxis = "logRatio", xlim=NULL, xaxt = "n", cex = 0.5, gene.cex = 0.5, plot.title = NULL, cnCol = NULL, spacing=4, cytoBand=T, alphaVal=1, main){
+  #color coding
+  alphaVal <- ceiling(alphaVal * 255); class(alphaVal) = "hexmode"
+  alphaSubcloneVal <- ceiling(alphaVal / 2 * 255); class(alphaVal) = "hexmode"
+  subcloneCol <- "black" #c("#00FF00")
+  if (is.null(cnCol)){
+		cnCol <- c("#00FF00","#006400","#0000FF","#8B0000",rep("#FF0000", 26))
+	}
+	cnCol <- paste(cnCol,alphaVal,sep="")
+  names(cnCol) <- c("HOMD","HETD","NEUT","GAIN","AMP","HLAMP",paste0(rep("HLAMP", 8), 2:25))
+#  segCol <- cnCol
+#  ## add in colors for subclone if param provided
+#  if (!is.null(param)){
+#    ind <- ((which.max(param$ct) + 1) : length(param$ct)) + 1
+#    cnCol[ind] <- paste0(cnCol[ind], alphaSubcloneVal / 2)
+#    segCol[ind] <- "#00FF00"
+#  }
+  # adjust for ploidy #
+  if (!is.null(ploidyT) & yaxis != "integer"){
+    ploidyS <- purity * ploidy + (1-purity) * normCN
+    dataIn[, colName] <- as.numeric(dataIn[, colName]) + log2(ploidy / 2)
+    
+    if (!is.null(segs) & yaxis != "integer"){
+      segs[, colName] <- segs[, colName] + log2(ploidy / 2)
+    }
+  }
+  dataIn <- dataIn[!is.na(dataIn[, colName]), ]
+  
+  if (!is.null(chr)){
+    for (i in chr){
+      
+      dataByChr <- dataIn[dataIn[,"chr"]==as.character(i),]
+          
+       ## set y axis labels as either integer or logR copy number
+       zero <- 0.25  
+      cn <- c(0, 1, 2, 4, `^`(2, 3:(yrange[2]+1)))
+      #ploidyToUse <- ploidyS
+      if (i == "X"){
+        normCN <- 1
+        zero <- 0.5
+        cn <- c(0, 1, 2, 4, `^`(2, 3:(yrange[2]+1)))
+      }      
+      if (yaxis == "integer"){
+        y.ticks <- log2(cn)
+        y.ticks[1] <- log2(zero)  
+        yrange[1] <- y.ticks[1]    
+        ylab <- "Copy Number"
+        #dataByChr[, colName] <- log2(logRbasedCN(dataByChr[, colName], purity, ploidyT, cn=normCN))
+        dataByChr[, colName] <- log2(dataByChr[, colName])
+        if (!is.null(segs)){
+      		segs[, colName] <- log2(segs[, colName])# + log2(ploidyS / 2)
+    	}
+        centreLine <- log2(normCN)
+      }else{      
+      	#dataByChr[, colName] <- dataByChr[, colName] + log2(ploidyS / 2)
+      	cnLog <- log2(cn[-which(cn==3)] / normCN)  
+        cn <- seq(-2,yrange[2],2)#c(-2, cn)
+        y.ticks <- cn
+        ylab <- "Copy Number (log2 ratio)"
+        centreLine <- 0
+      }
+      
+      # normCN <- round(ploidy)
+#       cn <- c(0, 1:4, `^`(2, 3:(yrange[2]+1)))
+#       ploidyToUse <- ploidyS
+#       if (i == "X"){
+#         normCN <- 1
+#         ploidyToUse <- ploidyS / 2
+#       }
+#       if (yaxis == "integer"){
+#         cnCor <- (purity*cn + (1-purity) * normCN)
+#         #cnCor <- (normCN*purity*cn + normCN*(1-purity)*2) / ploidyToUse
+#         cnCor.logR <- log2(cnCor/normCN)
+#         y.ticks <- cnCor.logR
+#         y.ticks[1] <- -2
+#         ylab <- "Copy Number"
+#       }else{
+#         cn <- log2(cn[-which(cn==3)] / normCN)
+#         cn[1] <- -2
+#         y.ticks <- cn
+#         cn <- format(cn, digits=2) 
+#         ylab <- "Copy Number (log2 ratio)"
+#       }
+
+      #plot the data
+      #if (outfile!=""){ pdf(outfile,width=10,height=6) }
+      par(mar=c(spacing,8,4,2))
+      #par(xpd=NA)
+      coord <- (as.numeric(dataByChr[,"end"]) + as.numeric(dataByChr[,"start"]))/2
+      if (is.null(xlim)){
+        xlim <- c(1,as.numeric(dataByChr[dim(dataByChr)[1],"start"]))
+        xaxt <- "n"
+      }
+      if (is.null(plot.title)){
+        plot.title <- paste("Chromosome ",i,sep="")
+      }
+      ## plot logR for bins ##
+      plot(coord,as.numeric(dataByChr[, colName]),col=cnCol[dataByChr[,"event"]],
+           pch=16, ylim=yrange, yaxt="n", 
+           xlim=xlim, xaxt = xaxt, xlab="",ylab=ylab,
+           cex.lab=1.5,cex.axis=1.5, cex=cex,las=1)
+      axis(2, at=y.ticks, labels=cn, las=2, cex.axis=1.5)
+      title(plot.title, line = 1.25, xpd=NA, cex.main=1.5)
+      ## plot centre line ##
+      lines(c(1,as.numeric(dataByChr[dim(dataByChr)[1],3])),rep(0,2),type="l",col="grey",lwd=0.75)
+      if (!is.null(segs)){
+        segsByChr <- segs[segs[,"chr"]==as.character(i),,drop=FALSE]
+        ind <- segsByChr$subclone.status == FALSE
+        apply(segsByChr[ind, ], 1, function(x){
+          lines(x[c("start","end")], rep(x[colName], 2), col = cnCol[x["call"]], lwd = 3)
+          invisible()
+        })
+        if (sum(!ind) > 0){
+          apply(segsByChr[!ind, ], 1, function(x){
+            lines(x[c("start","end")], rep(x[colName], 2), col = subcloneCol, lwd = 3)
+            invisible()
+          })
+        }
+      }
+      
+      if (cytoBand==TRUE){
+        require(quantsmooth)
+        par(xpd = NA)
+        #paintCytobands(chrom=chr, units="bases", pos=c(0,(yrange[1]-0.5)), width=0.75, legend=F)	
+      }
+      
+      if (!is.null(geneAnnot)){
+        #par(xpd=F)
+        colnames(geneAnnot) <- c("Gene","Chr","Start","Stop")
+        geneAnnot <- geneAnnot[geneAnnot[,"Chr"]==chr,]
+        if (nrow(geneAnnot) > 0){
+        for (g in 1:dim(geneAnnot)[1]){
+          print(geneAnnot[g,"Gene"])
+          abline(v=as.numeric(geneAnnot[g,"Start"]),col="black",lty=3,xpd=F)
+          abline(v=as.numeric(geneAnnot[g,"Stop"]),col="black",lty=3,xpd=F)			
+          atP <- (as.numeric(geneAnnot[g,"Stop"]) - as.numeric(geneAnnot[g,"Start"]))/2 + as.numeric(geneAnnot[g,"Start"])
+          if (atP < dataByChr[1,"start"]){ atP <- dataByChr[1,"start"] }
+          else if (atP > dataByChr[dim(dataByChr)[1],"start"]){ atP <- dataByChr[dim(dataByChr)[1],"start"] }
+          mtext(geneAnnot[g,"Gene"],side=3,line=0,at=atP,cex=gene.cex)
+          }
+        }
+      }
+    }
+  }else{  #plot for all chromosomes
+    par(mar=c(spacing,8,2,2))
+    midpt <- (as.numeric(dataIn[,"end"]) + as.numeric(dataIn[,"start"]))/2
+    coord <- getGenomeWidePositions(dataIn[,"chr"],midpt)
+    plot(coord$posns,as.numeric(dataIn[, colName]),
+         col=cnCol[as.character(dataIn[,"event"])],pch=16,xaxt="n", ylim=yrange,
+         xlim=c(1,as.numeric(coord$posns[length(coord$posns)])),
+         xlab="",ylab="Copy Number (log2 ratio)",
+         cex.lab=1.5,cex.axis=1.5,cex=0.5,las=1,bty="n",
+         #main=dataIn[1,"sample"])
+         main=main)
+    #plot segments
+    if (!is.null(segs)){
+      coordEnd <- getGenomeWidePositions(segs[, "chr"], segs[, "end"])
+      coordStart <- coordEnd$posns - (segs[, "end"] - segs[, "start"] + 1)
+      xlim <- as.numeric(c(1, coordEnd$posns[length(coordEnd$posns)]))
+      col <- cnCol[as.numeric(segs[, "state"] + 1)]
+      value <- as.numeric(segs[, "median"])
+      sc.status <- as.logical(segs[, "subclone.status"])
+      mat <- as.data.frame(cbind(coordStart, coordEnd$posns, value, sc.status, col))
+      rownames(mat) <- 1:nrow(mat)
+      ## clonal CN
+      ind <- mat$sc.status == FALSE
+      apply(mat[ind, ], 1, function(x){
+        lines(x[1:2], rep(x[3], 2), col = x[5], lwd = 3)
+        invisible()
+      })
+      ## subclonal CN
+      if (sum(!ind) > 0){
+        apply(mat[!ind, ], 1, function(x){
+          lines(x[1:2], rep(x[3], 2), col = subcloneCol, lwd = 3)
+          invisible()
+        })
+      }
+    }
+    lines(as.numeric(c(1,coord$posns[length(coord$posns)])),rep(0,2),type="l",col="grey",lwd=2)
+    plotChrLines(dataIn[,"chr"],coordEnd$chrBkpt,yrange)
+  }
+}
+
+plotCNlogRByChr <- function(dataIn, colName = "copy", segs=NULL, chr=NULL, ploidy = NULL, geneAnnot=NULL, yrange=c(-4,6), xlim=NULL, cnCol = NULL, xaxt = "n", yaxis = "log2", cex = 0.5, gene.cex = 0.5, plot.title = NULL, spacing=4, cytoBand=T, alphaVal=1){
+	#color coding
+	alphaVal <- ceiling(alphaVal * 255); class(alphaVal) = "hexmode"
+	if (is.null(cnCol)){
+		cnCol <- c("#00FF00","#006400","#0000FF","#8B0000",rep("#FF0000", 16))
+		#cnCol <- col2rgb(c("green","darkgreen","blue","darkred","red","brightred"))
+		names(cnCol) <- c("HOMD","HETD","NEUT","GAIN","AMP","HLAMP",paste0(rep("HLAMP", 8), 2:15))
+	}
+	cnCol <- paste(cnCol,alphaVal,sep="")
+	# adjust for ploidy #
+	if (!is.null(ploidy)){
+    dataIn[, colName] <- as.numeric(dataIn[, colName]) + log2(ploidy / 2)
+    
+    if (!is.null(segs)){
+			segs[, "median"] <- segs[, "median"] + log2(ploidy / 2)
+		}
+  }
+  
+
+	if (!is.null(chr)){
+	for (i in chr){
+	
+		dataByChr <- dataIn[dataIn[,"chr"]==as.character(i),]
+		
+		#plot the data
+		#if (outfile!=""){ pdf(outfile,width=10,height=6) }
+		par(mar=c(spacing,8,4,2))
+		#par(xpd=NA)
+		coord <- (as.numeric(dataByChr[,"end"]) + as.numeric(dataByChr[,"start"]))/2
+		if (is.null(xlim)){
+			xlim <- c(1,as.numeric(dataByChr[dim(dataByChr)[1],"start"]))
+			xaxt <- "n"
+		}
+		cn <- c(0, 1:4, `^`(2, 3:(yrange[2]+1)))
+    normCN <- 2
+    if (i == "X"){
+    	normCN <- 1
+    }
+		if (yaxis == "integer"){
+			y.ticks <- log2(cn / normCN)
+			y.ticks[1] <- -2
+			ylab <- "Copy Number"
+		}else{
+		  cn <- log2(cn[-which(cn==3)] / normCN)
+		  cn[1] <- -2
+			y.ticks <- cn
+			cn <- format(cn, digits=2) 
+			ylab <- "Copy Number (log2 ratio)"
+		}
+		if (is.null(plot.title)){
+			plot.title <- paste("Chromosome ",i,sep="")
+		}
+    ## plot logR for bins ##
+		plot(coord,as.numeric(dataByChr[, colName]),col=cnCol[as.numeric(dataByChr[,"state"])],
+				pch=19, ylim=yrange,
+				xlim=xlim, xaxt = xaxt, xlab="", yaxt="n",ylab=ylab,
+				cex.lab=1.5,cex.axis=1.5, cex=cex,las=1)
+		axis(2, at=y.ticks, labels=cn, las=2, cex.axis=1.5)
+		title(plot.title, line = 1.25, xpd=NA, cex.main=1.5)
+    ## plot centre line ##
+		lines(c(1,as.numeric(dataByChr[dim(dataByChr)[1],3])),rep(0,2),type="l",col="grey",lwd=0.75)
+		if (!is.null(segs)){
+			segsByChr <- segs[segs[,"chr"]==as.character(i),,drop=FALSE]
+			tmp <- apply(segsByChr, 1, function(x){
+			  lines(x[c("start","end")], rep(x["median"], 2), col = cnCol[as.numeric(x["state"])], lwd = 3)
+			})
+		}
+    
+		if (cytoBand==TRUE){
+			par(xpd = NA)
+			paintCytobands(chrom=chr, units="bases", pos=c(0,(yrange[1]-0.75)), width=0.5, legend=F)	
+		}
+
+		if (!is.null(geneAnnot)){
+			#par(xpd=F)
+			colnames(geneAnnot) <- c("Gene","Chr","Start","Stop")
+			geneAnnot <- geneAnnot[geneAnnot[,"Chr"]==chr,]
+			if (nrow(geneAnnot) > 0){
+        for (g in 1:dim(geneAnnot)[1]){
+          print(geneAnnot[g,"Gene"])
+          abline(v=as.numeric(geneAnnot[g,"Start"]),col="black",lty=3,xpd=F)
+          abline(v=as.numeric(geneAnnot[g,"Stop"]),col="black",lty=3,xpd=F)			
+          atP <- (as.numeric(geneAnnot[g,"Stop"]) - as.numeric(geneAnnot[g,"Start"]))/2 + as.numeric(geneAnnot[g,"Start"])
+          if (atP < dataByChr[1,"start"]){ atP <- dataByChr[1,"start"] }
+          else if (atP > dataByChr[dim(dataByChr)[1],"start"]){ atP <- dataByChr[dim(dataByChr)[1],"start"] }
+          mtext(geneAnnot[g,"Gene"],side=3,line=0,at=atP,cex=gene.cex)
+        
+        }
+      }
+		}
+		}	
+	  }else{  #plot for all chromosomes
+	  	par(mar=c(spacing,8,2,2))
+	  	midpt <- (as.numeric(dataIn[,"end"]) + as.numeric(dataIn[,"start"]))/2
+    	coord <- getGenomeWidePositions(dataIn[,"chr"],midpt)
+    	plot(coord$posns,as.numeric(dataIn[,colName]),
+    			col=cnCol[as.numeric(dataIn[,"state"])],pch=19,xaxt="n", ylim=yrange,
+    			xlim=c(1,as.numeric(coord$posns[length(coord$posns)])),
+    			xlab="",ylab="Copy Number (log2 ratio)",
+    			cex.lab=1.5,cex.axis=1.5,cex=0.5,las=1,bty="n",
+    			main=dataIn[1,"sample"])
+    	#plot segments
+    	if (!is.null(segs)){
+				coordEnd <- getGenomeWidePositions(segs[, "chr"], segs[, "end"])
+				coordStart <- coordEnd$posns - (segs[, "end"] - segs[, "start"] + 1)
+				xlim <- as.numeric(c(1, coordEnd$posns[length(coordEnd$posns)]))
+				col <- cnCol[as.numeric(segs[, "state"])]
+				value <- as.numeric(segs[, "median"])
+				mat <- as.data.frame(cbind(coordStart, coordEnd$posns, value, col))
+				rownames(mat) <- 1:nrow(mat)
+				tmp <- apply(mat, 1, function(x){
+					lines(x[1:2], rep(x[3], 2), col = x[4], lwd = 3)
+				})
+    	}
+    	lines(as.numeric(c(1,coord$posns[length(coord$posns)])),rep(0,2),type="l",col="grey",lwd=2)
+    	plotChrLines(dataIn[,"chr"],coord$chrBkpt,yrange)
+    }
+}
+
 
 curvedarrow.new <- function (from, to, lwd = 2, lty = 1, lcol = "black", arr.col = lcol,
     arr.pos = 0.5, curve = 1, dr = 0.01, endhead = FALSE, segment = c(0, 1), orient = "top", ...)

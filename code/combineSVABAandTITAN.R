@@ -99,12 +99,13 @@ cn.invDup.buffer <- cn.buffer * 10 ## (getSegSVoverlap) for sv and cn boundaries
 sv.cn.change.buffer <- 25000 # for determining prev and next cn segment status at SV
 minOverlapFrac <- 0.75 # frac overlap of SV with CN during boundary overlap (getSegSVoverlap)
 maxDupLength <- 10e7
-minNumSeg.simpleSV <- 5
+minNumSeg.simpleSV <- 10
 minSPAN <- 10000
 minInvSPAN <- 1000
 maxInvSPAN <- 5e6
 maxFBISPAN <- 30000 # used to determine BX counts - 99% quantile used
 minFBIcn <- 4
+minLR.CNV.svLen <- 1e6
 
 save.image(outImage)
 
@@ -179,13 +180,15 @@ save.image(outImage)
 message("Loading Long Ranger results ", LRsvFile)
 lr <- fread(LRsvFile)
 lr <- lr[SOMATIC==TRUE]
-lr[, support := "SOMATIC"]
+lr <- lr[!(SOURCE == "CNV" & SPAN < minLR.CNV.svLen)] # remove 
+lr[, support := SOURCE]
 #lr <- removeIdenticalSV(lr)
 lr <- sortBkptPairOrder(lr)
 
 #################################################
 ########### COMBINE SVABA + LONGRANGER ##########
 #################################################
+message("Combining SVABA and Long Ranger SV calls...") 
 ## find overlap between SVABA and LONGRANGER ##
 # assumes breakpoint 1 is always upstream of breakpoint 2 for intra chromosome events #
 svaba.1 <- copy(svaba) #breakpoint 1
@@ -230,6 +233,7 @@ bothSV.all <- copy(bothSV)
 bothSV.uniq <- cbind(SV.combined.id = 1:nrow(bothSV.uniq), bothSV.uniq, Mean.Molecule.Length = meanLength)
 
 ## output to files ##
+message("Output combined SV calls to files...")
 outFile <- paste0(outDir, "/", tumId, "_svaba.txt")
 write.table(svaba, file=outFile, col.names=T, row.names=F, quote=F, sep="\t")
 outFile <- paste0(outDir, "/", tumId, "_longranger.txt")
@@ -282,11 +286,14 @@ save.image(outImage)
 ########################################################################
 ######################### SV CLASSIFICATIONS ###########################
 ########################################################################
-if (segs[!grepl("X", Chromosome), median(Corrected_Copy_Number, na.rm=T)] == 2 || 
-		segs[!grepl("X", Chromosome), median(Corrected_Copy_Number, na.rm=T)] == 3){
+message("Performing SV classification...")
+# diploid genomes
+#if (segs[!grepl("X", Chromosome), median(Corrected_Copy_Number, na.rm=T)] == 2 || 
+#		segs[!grepl("X", Chromosome), median(Corrected_Copy_Number, na.rm=T)] == 3){
 	del.cn <- c("HOMD", "DLOH", "NLOH", "ALOH")
 	neut.cn <- c("NEUT", "HET")
-}else if (segs[!grepl("X", Chromosome), median(Corrected_Copy_Number, na.rm=T)] >= 4){
+# genome doubled
+if (segs[!grepl("X", Chromosome), median(Corrected_Copy_Number, na.rm=T)] >= 4){
 	del.cn <- c("HOMD", "DLOH", "NLOH", "ALOH", "GAIN")
 	neut.cn <- c("NEUT", "HET", "BCNA")
 }
@@ -304,6 +311,7 @@ consensus.sv.id <- sv[, SV.combined.id]
 ########################################################################
 ## interchromosomal translocations - balanced vs unbalanced ##
 ########################################################################
+message("Interchromosomal translocations")
 #interchr.seg.sv <- getSegSVoverlap(segs, sv, event.cn=neut.cn, buffer=cn.buffer, interChr = TRUE)
 interchrUBal.cn.sv <- sv[type == "InterChr" & 
 		((Copy_Number_1_prev != Copy_Number_1_next) | (Copy_Number_2_prev != Copy_Number_2_next))]
@@ -325,6 +333,7 @@ if (nrow(interchrUBal.cn.sv) > 0){
 ########################################################################
 ## simple deletions ##
 ########################################################################
+message("Deletions")
 # use segment overlap and
 # bin-level adjacent CN: b1.prev > b1.next & b2.prev < b2.next & meanCN between b1-b2 < b1.prev/b2.next 
 del.cn.sv <- sv[type == "Deletion" & 
@@ -352,6 +361,7 @@ sv[is.na(CN_overlap_type) & type=="Deletion" & SPAN > minSPAN & SPAN < cn.buffer
 ########################################################################
 ## simple tandem duplications ##
 ########################################################################
+message("Tandem duplications")
 # use segment overlap and breakpoint CN
 gain.cn.sv <- sv[type == "Duplication" & 
 	((Copy_Number_1_prev < Copy_Number_1_next | Copy_Number_2_prev > Copy_Number_2_next) &
@@ -385,6 +395,7 @@ sv[is.na(CN_overlap_type) & type=="Duplication" & SPAN > minSPAN & SPAN < cn.buf
 ########################################################################
 ## unbalanced inversions ##
 ########################################################################
+message("Inversions - unbalanced")
 inv.cn.sv <- sv[type == "Inversion" & SPAN >= minInvSPAN & SPAN <= maxInvSPAN &
 	((Copy_Number_1_prev != Copy_Number_1_2_mean | Copy_Number_2_next != Copy_Number_1_2_mean) |
 	(Copy_Number_1_prev != Copy_Number_1_next | Copy_Number_2_prev != Copy_Number_2_next))]
@@ -408,6 +419,7 @@ sv[SV.combined.id %in% inv.cn.sv$SV.combined.id, CN_overlap_type := "Inversion-U
 ########################################################################
 ## balanced inversions ##
 ########################################################################
+message("Inversion - balanced")
 inv.cn.sv <- sv[type == "Inversion" & SPAN >= minInvSPAN & SPAN <= maxInvSPAN &
 	((Copy_Number_1_prev == Copy_Number_1_2_mean & Copy_Number_2_next == Copy_Number_1_2_mean) |
 	(Copy_Number_1_prev == Copy_Number_1_next & Copy_Number_2_prev == Copy_Number_2_next))]
@@ -431,6 +443,7 @@ sv[SV.combined.id %in% inv.cn.sv$SV.combined.id, CN_overlap_type := "Inversion-B
 ########################################################################
 ## foldback inversions ##
 ########################################################################
+message("Fold-back inversions")
 inv.cn.sv <- sv[type == "Inversion" & (SPAN < maxFBISPAN) &
 	(Copy_Number_1_prev != Copy_Number_2_next | Copy_Number_1 != Copy_Number_2) &
 	(Copy_Number_1 / Ploidy.medianCN * 2 > minFBIcn | Copy_Number_2 / Ploidy.medianCN * 2 > minFBIcn)]
@@ -442,6 +455,7 @@ sv[SV.combined.id %in% inv.cn.sv$SV.combined.id, CN_overlap_type := "Inversion-F
 ########################################################################
 ## Rest: balanced rearrangements - intra-chr SVs ##
 ########################################################################
+message("Balanced rearrangements - intra-chromosomal")
 sv[is.na(CN_overlap_type) & type=="Inversion" & SPAN >= minInvSPAN &
 	((Copy_Number_1_prev == Copy_Number_1_2_mean & Copy_Number_2_next == Copy_Number_1_2_mean) |
 	(Copy_Number_1_prev == Copy_Number_1_next & Copy_Number_2_prev == Copy_Number_2_next)),
@@ -449,11 +463,13 @@ sv[is.na(CN_overlap_type) & type=="Inversion" & SPAN >= minInvSPAN &
 ## Rest: filter short inversions (usually from LONGRANGER)
 sv[is.na(CN_overlap_type) & type=="Duplication" & Tool == "LONGRANGER" & SPAN > minSPAN & SPAN < cn.buffer & Copy_Number_1_2_numSegs <= 2, CN_overlap_type := "LR-shortDup"]
 ## Rest: unbalanced rearrangements ##
+message("Unbalanced rearrangements - the rest of the events")
 sv[is.na(CN_overlap_type) & !is.na(type) & SPAN >= minInvSPAN, CN_overlap_type := "Unbalanced"]
 
 ########################################################################
 ## filter short inversions and deletions (longranger & svaba) ##
 ########################################################################
+message("Filtering events with no class - usually short inversions and deletions")
 #sv <- sv[!is.na(CN_overlap_type) | !is.na(overlap.GROCSVS.id)]
 sv <- sv[!is.na(CN_overlap_type)]
 

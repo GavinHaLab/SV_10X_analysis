@@ -14,6 +14,7 @@ option_list <- list(
 	make_option(c("--normLargeSVFile"), type="character", help = "Long Ranger large SV calls for normal sample (large_sv_calls.bedpe)"),
 	make_option(c("--tumDeletionFile"), type="character", help = "Long Ranger deletion calls for tumor sample (dels.vcf.gz)"),
 	make_option(c("--normDeletionFile"), type="character", help = "Long Ranger deletion calls for normal sample (dels.vcf.gz)"),
+	make_option(c("--includeShortDeletions"), type="logical", default = TRUE, help = "true if Long Ranger deletion calls are to be included in output. [Default: %default]"),
 	make_option(c("--genomeBuild"), type="character", default="hg19", help = "Genome build: hg19 or hg38. Default [%default]"),
 	make_option(c("--genomeStyle"), type = "character", default = "NCBI", help = "NCBI or UCSC chromosome naming convention; use UCSC if desired output is to have \"chr\" string. [Default: %default]"),
 	make_option(c("--chrs"), type = "character", default = "c(1:22, 'X')", help = "Chromosomes to analyze; string [Default: %default"),
@@ -24,7 +25,6 @@ option_list <- list(
 parseobj <- OptionParser(option_list=option_list, usage = "usage: Rscript %prog [options]")
 opt <- parse_args(parseobj)
 print(opt)
-
 
 library(VariantAnnotation)
 library(GenomicRanges)
@@ -40,6 +40,7 @@ tumLargeSVFile <- opt$tumLargeSVFile
 normLargeSVFile <- opt$normLargeSVFile
 tumDeletionFile <- opt$tumDeletionFile
 normDeletionFile <- opt$normDeletionFile
+includeShortDeletions <- opt$includeShortDeletions
 outputSVFile <- opt$outputSVFile
 outDir <- opt$outDir
 dir.create(outDir, recursive = TRUE)
@@ -58,19 +59,31 @@ save.image(outImage)
 
 tum.sv <- getSVfromBEDPE(tumLargeSVFile, skip=1, genomeStyle = genomeStyle)
 norm.sv <- getSVfromBEDPE(normLargeSVFile, skip=1, genomeStyle = genomeStyle)
-del.tum <- readVcf(tumDeletionFile, genome=genomeBuild)
-del.tum <- getSVfromCollapsedVCF.LR(del.tum, chrs=chrs, genomeStyle = genomeStyle)
-del.norm <- readVcf(normDeletionFile, genome=genomeBuild)
-del.norm <- getSVfromCollapsedVCF.LR(del.norm, chrs=chrs, genomeStyle = genomeStyle)
+if (includeShortDeletions){
+	del.tum <- readVcf(tumDeletionFile, genome=genomeBuild)
+	del.tum <- getSVfromCollapsedVCF.LR(del.tum, chrs=chrs, genomeStyle = genomeStyle)
+	del.norm <- readVcf(normDeletionFile, genome=genomeBuild)
+	del.norm <- getSVfromCollapsedVCF.LR(del.norm, chrs=chrs, genomeStyle = genomeStyle)
+}
 
 save.image(outImage)
 
-tum.sv.del <- rbind(tum.sv, del.tum[FILTER=="PASS" & SPAN >= minDelLength & QUAL >= minQual], fill=TRUE)
-tum.sv.del <- tum.sv.del[, .(chromosome_1, start_1, chromosome_2, start_2, mateID, FILTER,
-	HAP_ALLELIC_FRAC, ALLELIC_FRAC, DR, SR, PS, SPAN, orient_1, orient_2)]
-norm.sv.del <- rbind(norm.sv, del.norm[FILTER=="PASS" & SPAN >= minDelLength & QUAL >= minQual], fill=TRUE)
-norm.sv.del <- norm.sv.del[, .(chromosome_1, start_1, chromosome_2, start_2, mateID, FILTER,
-	HAP_ALLELIC_FRAC, ALLELIC_FRAC, DR, SR, PS, SPAN, orient_1, orient_2)]
+## combine SVs with short Deletions if specified to do so
+if (includeShortDeletions){
+	tum.sv.del <- rbind(tum.sv, del.tum[FILTER=="PASS" & SPAN >= minDelLength & QUAL >= minQual], fill=TRUE)
+	tum.sv.del <- tum.sv.del[, .(chromosome_1, start_1, chromosome_2, start_2, mateID, FILTER, SOURCE,
+		HAP_ALLELIC_FRAC, ALLELIC_FRAC, DR, SR, PS, SPAN, orient_1, orient_2)]
+	norm.sv.del <- rbind(norm.sv, del.norm[FILTER=="PASS" & SPAN >= minDelLength & QUAL >= minQual], fill=TRUE)
+	norm.sv.del <- norm.sv.del[, .(chromosome_1, start_1, chromosome_2, start_2, mateID, FILTER, SOURCE,
+		HAP_ALLELIC_FRAC, ALLELIC_FRAC, DR, SR, PS, SPAN, orient_1, orient_2)]
+}else{
+	tum.sv.del <- tum.sv[, .(chromosome_1, start_1, chromosome_2, start_2, mateID, 
+		HAP_ALLELIC_FRAC, ALLELIC_FRAC, DR, SR, PS, SPAN, orient_1, orient_2)]
+	tum.sv.del[, FILTER := "."]
+	norm.sv.del <- norm.sv[, .(chromosome_1, start_1, chromosome_2, start_2, mateID, 
+		HAP_ALLELIC_FRAC, ALLELIC_FRAC, DR, SR, PS, SPAN, orient_1, orient_2)]
+	norm.sv.del[, FILTER := "."]
+}
 
 overlap <- getOverlapSV(tum.sv.del, norm.sv.del, buffer.x = buffer, buffer.y = buffer)
 

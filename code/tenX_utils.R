@@ -702,6 +702,7 @@ getSVfromBEDPE <- function(bedFile, chrs = c(1:22, "X"), skip=0, genomeStyle = "
 	bed <- fread(bedFile, skip=skip)	
 	orient <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^ORIENT=(.+)"))[2] }))
 	type <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^TYPE=(.+)"))[2] }))
+	source <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^SOURCE=(.+)"))[2] }))
 	allelefrac <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^ALLELIC_FRAC=(.+)"))[2] }))
 	hapfrac <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^HAP_ALLELIC_FRAC=(.+)"))[2] }))
 	nsplit <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^NSPLIT=(.+)"))[2] }))
@@ -710,8 +711,8 @@ getSVfromBEDPE <- function(bedFile, chrs = c(1:22, "X"), skip=0, genomeStyle = "
 	ps2 <- unlist(lapply(strsplit(bed$info, ";"), function(x){ na.omit(str_match(x, "^PS2=(.+)"))[2] }))
 	
 	## assign new start1 and start2
-	setnames(bed, c("#chrom1", "start1", "chrom2", "start2", "name"), 
-			c("chromosome_1", "start_1", "chromosome_2", "start_2", "mateID"))
+	setnames(bed, c("#chrom1", "start1", "chrom2", "start2", "name", "filters"), 
+			c("chromosome_1", "start_1", "chromosome_2", "start_2", "mateID", "FILTER"))
 	bed[, start_1 := floor(start_1 + (stop1 - start_1)/2)]
 	bed[, start_2 := floor(start_2 + (stop2 - start_2)/2)]
 	bed[, c("stop1", "stop2") := NULL]
@@ -722,6 +723,7 @@ getSVfromBEDPE <- function(bedFile, chrs = c(1:22, "X"), skip=0, genomeStyle = "
 	bed[, DR := npair]
 	bed[, SR := nsplit]
 	bed[, PS := ps1]; bed[, PS2 := ps2]
+	bed[, SOURCE := source]
 	bed[, SVTYPE := type]
 	bed[, orient := orient]
 	bed[chromosome_1 == chromosome_2, SPAN := start_2 - start_1 + 1]
