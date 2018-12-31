@@ -1,0 +1,47 @@
+## path to tools ##
+svaba_exe:  /path/to/svaba
+samTools:  /path/to/samtools
+
+## path to scripts ##
+tenX_funcs:  code/tenX_utils.R
+svaba_funcs:  code/svaba_utils.R
+plot_funcs:  code/plotting.R
+bxRescue_script:  code/barCodeOverlap.R
+combineSVCN_script:  code/combineSVABAandTITAN.R
+getLRsomaticSV_script:  code/getLongRangerSomaticSV.R
+plotSVCN_script:  code/plotTitanSvaba.R
+
+## path to TITAN snakemake root  ##
+titan_libdir:  /path/to/TitanCNA/
+titan_results:  /path/to/TitanCNA/snakemake_results/
+
+## reference files ##
+refGenome:  /path/to/ref/genome.fasta
+genomeBuild:  hg38
+genomeStyle:  UCSC
+cytobandFile:  data/cytoBand_hg38.txt # only need if hg38
+chrs:  c(1:22, \"X\")
+
+## LongRanger params ##
+bamFileName:  phased_possorted_bam.bam
+
+## standard parameters for qsub memory, runtime, pe (parallel environment)
+# use what your scheduler designates for parameters; does not apply to local run
+# invoke using:
+# snakemake -s svaba.snakefile --cluster-sync "qsub -l h_vmem={params.mem},h_rt={params.runtime} {params.pe}" -j 100 --jobscript config/cluster.sh
+std_mem:  4G
+std_runtime:  "05:00:00"  
+std_numCores:  -pe smp 1 -binding linear:1
+
+## Plotting parameters ##
+## if users want to zoom in on a specific region, here is an example ##
+plot_id: AR_enhancer_zoom
+plot_zoom:  TRUE
+plot_chrs:  c(\"X\") 
+plot_startPos:  66000000
+plot_endPos:  67000000
+plot_geneFile:  data/AR_coord.txt ## include list of genes to annotate on plot
+plot_ylim:  c(-2,6)
+plot_size:  c(8,4)
+plot_type:  titan ## titan - will include haplotype fraction
+plot_format:  png
