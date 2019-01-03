@@ -93,7 +93,7 @@ The second snakemake file [combineSvabaTitan.snakefile](combineSvabaTitan.snakef
   ```
   snakemake -s combineSvabaTitan.snakefile --cores 5
   #OR
-  snakemake -s combineSvabaTitan.snakefile --cluster-sync "qsub -l h_vmem={params.mem},h_rt={params.runtime} {params.pe}" -j 50 --jobscript config/cluster.sh
+  snakemake -s combineSvabaTitan.snakefile --cluster-config config/cluster_slurm.yaml --cluster "sbatch -p {cluster.partition} --mem={cluster.mem} -t {cluster.time} -c {cluster.ncpus} -n {cluster.ntasks} -o {cluster.output}" -j 50
   ```
   
   To generate custom zoomed-in plots for a region of interest, users can specify the coordinates in the [configPlotZoom.yaml](config/configPlotZoom.yaml) file as a template. Change the values in these fields, for example:
