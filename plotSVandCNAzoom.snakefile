@@ -43,12 +43,9 @@ rule plotSVABAandTITAN:
 		type=config["plot_type"],
 		geneFile=config["plot_geneFile"],
 		size=config["plot_size"],
-		format=config["plot_format"],
-		mem=config["std_mem"],
-		runtime=config["std_runtime"],
-		pe=config["std_numCores"]		
+		format=config["plot_format"]	
 	log:
-		"logs/plotSVABAandTITAN_zoom/{plotID}/.log"
+		"logs/plotSVABAandTITAN_zoom/{plotID}/{tumor}.log"
 	shell:
 		"Rscript {params.plotSVCNscript} --id {wildcards.tumor} --tenX_funcs {params.tenXfuncs} --svaba_funcs {params.svabafuncs} --plot_funcs {params.plotfuncs} --titan_libdir {params.libdir} --svFile {input.svabaVCF} --titanBinFile {input.titanBinFile} --titanSegFile {input.titanSegFile} --titanParamFile {input.titanParamFile} --chrs \"{params.chrs}\" --genomeBuild {params.genomeBuild} --genomeStyle {params.genomeStyle} --cytobandFile {params.cytobandFile} --start {params.start} --end {params.end} --zoom {params.zoom} --plotYlim \"{params.ylim}\" --geneFile {params.geneFile} --plotCNAtype {params.type} --plotSize \"{params.size}\" --plotFormat {params.format} --outDir {output} > {log} 2> {log}" 
 	

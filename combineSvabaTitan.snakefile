@@ -6,7 +6,7 @@ def getLRFullPath(base, filename):
   return glob.glob(''.join([base, "/*/outs/", filename]))
   
 def getTITANpath(base, id, ext):
-  return glob.glob(''.join([base, "/results/titan/optimalClusterSolution/", id, "_cluster*", ext]))
+  return glob.glob(''.join([base, "results/titan/optimalClusterSolution/", id, "_cluster*", ext]))
 
 #TUM, CLUST = glob_wildcards("../../TITAN/snakemake/results/titan/optimalClusterSolution/{tum}_cluster1.titan.ichor.cna.txt")
 #SEG,CLUST = glob_wildcards(config["titanPath"], "/results/titan/optimalClusterSolution/{tumor}_cluster{clust}.titan.ichor.cna.txt")
@@ -33,10 +33,7 @@ rule getLongRangerSomaticSV:
 		tenXfuncs=config["tenX_funcs"],
 		genomeBuild=config["genomeBuild"],
 		genomeStyle=config["genomeStyle"],
-		chrs=config["chrs"],
-		mem=config["std_mem"],
-		runtime=config["std_runtime"],
-		pe=config["std_numCores"]
+		chrs=config["chrs"]
 	log:
 		"logs/LongRangerSomaticSV/{tumor}.log"
 	shell:
@@ -63,10 +60,7 @@ rule combineSVABAandTITAN:
 		minMapQ=config["bxRescue_minMapQ"],
 		minLength=config["bxRescue_minLength"],
 		windowSize=config["bxRescue_windowSize"],
-		minRead=config["bxRescue_minReadOverlapSupport"],
-		mem=config["std_mem"],
-		runtime=config["std_runtime"],
-		pe=config["std_numCores"]		
+		minRead=config["bxRescue_minReadOverlapSupport"]	
 	log:
 		"logs/combineSVABAandTITAN/{tumor}.log"
 	shell:
@@ -97,10 +91,7 @@ rule plotSVABAandTITAN:
 		type=config["plot_type"],
 		geneFile=config["plot_geneFile"],
 		size=config["plot_size"],
-		format=config["plot_format"],
-		mem=config["std_mem"],
-		runtime=config["std_runtime"],
-		pe=config["std_numCores"]		
+		format=config["plot_format"]	
 	log:
 		"logs/plotSVABAandTITAN/{tumor}.log"
 	shell:

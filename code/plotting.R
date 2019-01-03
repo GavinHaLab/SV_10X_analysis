@@ -306,8 +306,8 @@ findNearestLogR <- function(x, y, buffer = 1e6){
       y2 <- y[min(ind + 1, length(bin1Ind)), "LogRatio"]
     }
 	}
-	if (is.na(y1)) { y1 <- 0 }
-	if (is.na(y2)) { y2 <- 0 }
+	if (is.na(y1) | is.infinite(y1)) { y1 <- 0 }
+	if (is.na(y2) | is.infinite(y2)) { y2 <- 0 }
 	return(c(y1, y2))
 }
 

@@ -26,10 +26,7 @@ rule runSvaba:
 		svabaExe=config["svaba_exe"],
 		refGenome=config["refGenome"],
 		numThreads=config["svaba_numThreads"],
-		dbSNPindelVCF=config["svaba_dbSNPindelVCF"],
-		mem=config["svaba_mem"],
-		runtime=config["svaba_runtime"],
-		pe=config["svaba_numCores"]
+		dbSNPindelVCF=config["svaba_dbSNPindelVCF"]
 	log:
 		"logs/svaba/{tumor}.log"
 	shell:
@@ -54,10 +51,7 @@ rule barcodeRescue:
 		minMapQ=config["bxRescue_minMapQ"],
 		minLength=config["bxRescue_minLength"],
 		windowSize=config["bxRescue_windowSize"],
-		minRead=config["bxRescue_minReadOverlapSupport"],
-		mem=config["bxRescue_mem"],
-		runtime=config["bxRescue_runtime"],
-		pe=config["std_numCores"]		
+		minRead=config["bxRescue_minReadOverlapSupport"]	
 	log:
 		"logs/barcodeRescue/{tumor}.bxOverlap.log"
 	shell:

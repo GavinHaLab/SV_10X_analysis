@@ -25,14 +25,6 @@ chrs:  c(1:22, \"X\")
 ## LongRanger params ##
 bamFileName:  phased_possorted_bam.bam
 
-## standard parameters for qsub memory, runtime, pe (parallel environment)
-# use what your scheduler designates for parameters; does not apply to local run
-# invoke using:
-# snakemake -s svaba.snakefile --cluster-sync "qsub -l h_vmem={params.mem},h_rt={params.runtime} {params.pe}" -j 100 --jobscript config/cluster.sh
-std_mem:  4G
-std_runtime:  "05:00:00"  
-std_numCores:  -pe smp 1 -binding linear:1
-
 ## Plotting parameters ##
 ## if users want to zoom in on a specific region, here is an example ##
 plot_id: AR_enhancer_zoom

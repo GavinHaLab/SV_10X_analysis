@@ -204,12 +204,17 @@ for (j in 1:length(chrStr)){
   message("Plotting ", chrStr[j])
   ###################################
   ### SNOWMAN + BARCODE RESCUE ######
-  outPlot <- paste0(outPlotDir, "/", id, "_CNA-SV-BX_",plotType,"_",chrStr[j],".",plotFormat)
-  plotTitle <- paste0(id, " (", chrStr[j],")")
+  if (genomeStyle == "NCBI"){
+  	chrTitle <- paste0("chr", chrStr[j])
+  }else{
+  	chrTitle <- chrStr[j]
+  }
+  outPlot <- paste0(outPlotDir, "/", id, "_CNA-SV-BX_",plotType,"_",chrTitle,".",plotFormat)
+  plotTitle <- paste0(id, " (", chrTitle,")")
   if (zoom){
     ylimMax <- ulp[Chr==chrStr[j] & Start >= xlim[1] & Start <= xlim[2], max(get(colName), na.rm=T)] + 1
-    outPlot <- paste0(outPlotDir, "/", id, "_CNA-SV-BX_",plotType,"_chr",chrStr[j],"-",startPos,"-",endPos,".",plotFormat)
-    plotTitle <- paste0(id, " (chr", chrStr[j],":",format(round(startPos/1e6,2), nsmall=2),"Mb-",format(round(endPos/1e6,2),nsmall=2),"Mb)")
+    outPlot <- paste0(outPlotDir, "/", id, "_CNA-SV-BX_",plotType,"_",chrTitle,"-",startPos,"-",endPos,".",plotFormat)
+    plotTitle <- paste0(id, " (",chrTitle,":",format(round(startPos/1e6,2), nsmall=2),"Mb-",format(round(endPos/1e6,2),nsmall=2),"Mb)")
   }else{
     xlim <- c(1, seqlengths(seqinfo)[chrStr[j]])
     ylimMax <- ulp[, max(get(colName), na.rm=T)] + 1
@@ -239,7 +244,7 @@ for (j in 1:length(chrStr)){
     
     if (yaxis == "integer"){
    		normCN <- ifelse(grepl("X", chrStr[j]), 1, 2) 
-    	ylimMax.int <- ulp[, max(get(colName), na.rm=T)] + 1
+    	ylimMax.int <- ulp[Chr == chrStr[j], max(get(colName), na.rm=T)] * 2
     	ylimSV[2] <- min(ylimMax.int, 10)
     	ylimSV[1] <- 2
     	centreLine <- ifelse(grepl("X", chrStr[j]), 0, 1)
