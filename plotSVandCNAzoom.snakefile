@@ -2,9 +2,6 @@ configfile: "config/configPlotZoom.yaml"
 configfile: "config/samples.yaml"
 
 import glob
-def getLRFullPath(base, filename):
-  return glob.glob(''.join([base, "/*/outs/", filename]))
-  
 def getTITANpath(base, id, ext):
   return glob.glob(''.join([base, "results/titan/optimalClusterSolution/", id, "_cluster*", ext]))
 
@@ -14,8 +11,8 @@ def getTITANpath(base, id, ext):
 
 rule all:
   input: 
-  	expand("results/plotSVABAandTITAN_zoom/{plotID}/{tumor}/", tumor=config["pairings"], plotID=config["plot_id"])
-
+  	expand("results/plotSVABAandTITAN_zoom/{plotID}/{tumor}_CNA-SV_{type}_chr{chr}-{start}-{end}.{format}", tumor=config["pairings"], plotID=config["plot_id"], type=config["plot_type"], chr=config["plot_chr"], start=config["plot_startPos"], end=config["plot_endPos"], format=config["plot_format"])
+	
 		
 rule plotSVABAandTITAN:
 	input:
@@ -25,7 +22,7 @@ rule plotSVABAandTITAN:
 		titanSegFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".titan.ichor.seg.noSNPs.txt"),
 		titanParamFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".params.txt")
 	output:
-		"results/plotSVABAandTITAN_zoom/{plotID}/{tumor}/"
+		"results/plotSVABAandTITAN_zoom/{plotID}/{tumor}_CNA-SV_{type}_chr{chr}-{start}-{end}.{format}"
 	params:
 		plotSVCNscript=config["plotSVCN_script"],
 		tenXfuncs=config["tenX_funcs"],
@@ -36,7 +33,7 @@ rule plotSVABAandTITAN:
 		genomeStyle=config["genomeStyle"],
 		cytobandFile=config["cytobandFile"],
 		zoom=config["plot_zoom"],
-		chrs=config["plot_chrs"],
+		chr=config["plot_chr"],
 		start=config["plot_startPos"],
 		end=config["plot_endPos"],
 		ylim=config["plot_ylim"],
@@ -47,6 +44,6 @@ rule plotSVABAandTITAN:
 	log:
 		"logs/plotSVABAandTITAN_zoom/{plotID}/{tumor}.log"
 	shell:
-		"Rscript {params.plotSVCNscript} --id {wildcards.tumor} --tenX_funcs {params.tenXfuncs} --svaba_funcs {params.svabafuncs} --plot_funcs {params.plotfuncs} --titan_libdir {params.libdir} --svFile {input.svabaVCF} --titanBinFile {input.titanBinFile} --titanSegFile {input.titanSegFile} --titanParamFile {input.titanParamFile} --chrs \"{params.chrs}\" --genomeBuild {params.genomeBuild} --genomeStyle {params.genomeStyle} --cytobandFile {params.cytobandFile} --start {params.start} --end {params.end} --zoom {params.zoom} --plotYlim \"{params.ylim}\" --geneFile {params.geneFile} --plotCNAtype {params.type} --plotSize \"{params.size}\" --plotFormat {params.format} --outDir {output} > {log} 2> {log}" 
+		"Rscript {params.plotSVCNscript} --id {wildcards.tumor} --tenX_funcs {params.tenXfuncs} --svaba_funcs {params.svabafuncs} --plot_funcs {params.plotfuncs} --titan_libdir {params.libdir} --svFile {input.svabaVCF} --titanBinFile {input.titanBinFile} --titanSegFile {input.titanSegFile} --titanParamFile {input.titanParamFile} --chrs \"{params.chr}\" --genomeBuild {params.genomeBuild} --genomeStyle {params.genomeStyle} --cytobandFile {params.cytobandFile} --start {params.start} --end {params.end} --zoom {params.zoom} --plotYlim \"{params.ylim}\" --geneFile {params.geneFile} --plotCNAtype {params.type} --plotSize \"{params.size}\" --outPlotFile {output} > {log} 2> {log}" 
 	
 

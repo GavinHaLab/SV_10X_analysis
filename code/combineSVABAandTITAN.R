@@ -248,8 +248,8 @@ message("Annotating SVs with copy number...")
 ## annotate segment CN overlapping exactly at breakpoints
 sv <- copy(bothSV.uniq)
 annot <- annotateSVwithCN(sv, segs, cnColToAnnotate = "Corrected_Copy_Number")
-annotMaj <- annotateSVwithCN(sv, segs, cnColToAnnotate = "MajorCN")
-annotMin <- annotateSVwithCN(sv, segs, cnColToAnnotate = "MinorCN")
+annotMaj <- annotateSVwithCN(sv, segs, cnColToAnnotate = "Corrected_MajorCN")
+annotMin <- annotateSVwithCN(sv, segs, cnColToAnnotate = "Corrected_MinorCN")
 sv[annot$ind1, Copy_Number_1 := annot$annot1]
 sv[annot$ind2, Copy_Number_2 := annot$annot2]
 sv[annotMaj$ind1, MajorCN_1 := annotMaj$annot1]
