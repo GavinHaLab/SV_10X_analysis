@@ -21,7 +21,7 @@ rule all:
   	expand("results/LongRangerSomaticSV/{tumor}/{tumor}.LR.somatic.sv.txt", tumor=config["pairings"]),
   	#expand(directory("results/plotSVABAandTITAN/{tumor}"), tumor=config["pairings"])
   	expand("results/plotSVABAandTITAN/{tumor}/{tumor}_CNA-SV-BX_{type}_chr{chr}.{format}", tumor=config["pairings"], type=config["plot_type"], chr=CHRS, format=config["plot_format"])
-  	
+  		
 rule getLongRangerSomaticSV:
 	input:
 		tumSVFile=lambda wildcards: getLRFullPath(config["samples"][wildcards.tumor], "large_sv_calls.bedpe"),
@@ -75,7 +75,7 @@ rule plotSVABAandTITAN:
 		titanSegFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".titan.ichor.seg.noSNPs.txt"),
 		titanParamFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".params.txt")
 	output:
-		"results/plotSVABAandTITAN/{tumor}/{tumor}_CNA-SV-BX_{type}_{chrs}.{format}"
+		"results/plotSVABAandTITAN/{tumor}_CNA-SV-BX_{type}_chr{chr}.{format}"
 	params:
 		plotSVCNscript=config["plotSVCN_script"],
 		tenXfuncs=config["tenX_funcs"],
@@ -97,6 +97,6 @@ rule plotSVABAandTITAN:
 	log:
 		"logs/plotSVABAandTITAN/{tumor}/{tumor}_CNA-SV-BX_{type}_{chrs}.{format}.log"
 	shell:
-		"Rscript {params.plotSVCNscript} --id {wildcards.tumor} --tenX_funcs {params.tenXfuncs} --svaba_funcs {params.svabafuncs} --plot_funcs {params.plotfuncs} --titan_libdir {params.libdir} --svFile {input.svabaVCF} --titanBinFile {input.titanBinFile} --titanSegFile {input.titanSegFile} --titanParamFile {input.titanParamFile} --chrs \"{params.chrs}\" --genomeBuild {params.genomeBuild} --genomeStyle {params.genomeStyle} --cytobandFile {params.cytobandFile} --start {params.start} --end {params.end} --zoom {params.zoom} --plotYlim \"{params.ylim}\" --geneFile {params.geneFile} --plotCNAtype {params.type} --plotSize \"{params.size}\" --plotFormat {params.format} --outDir {output} > {log} 2> {log}" 
+		"Rscript {params.plotSVCNscript} --id {wildcards.tumor} --tenX_funcs {params.tenXfuncs} --svaba_funcs {params.svabafuncs} --plot_funcs {params.plotfuncs} --titan_libdir {params.libdir} --svFile {input.svabaVCF} --titanBinFile {input.titanBinFile} --titanSegFile {input.titanSegFile} --titanParamFile {input.titanParamFile} --chrs \"{params.chrs}\" --genomeBuild {params.genomeBuild} --genomeStyle {params.genomeStyle} --cytobandFile {params.cytobandFile} --start {params.start} --end {params.end} --zoom {params.zoom} --plotYlim \"{params.ylim}\" --geneFile {params.geneFile} --plotCNAtype {params.type} --plotSize \"{params.size}\" --outPlotFile {output} > {log} 2> {log}" 
 	
 

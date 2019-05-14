@@ -13,7 +13,7 @@ source /broad/software/scripts/useuse
 reuse Bcftools
 reuse Samtools
 reuse Python-3.4
-reuse R-3.4
+reuse R-3.5
 
 {exec_job}
 
