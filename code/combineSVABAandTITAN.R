@@ -60,7 +60,12 @@ chrs <- as.character(eval(parse(text = opt$chrs)))
 
 save.image(outImage)
 
-seqinfo <- Seqinfo(genome=genomeBuild)
+bsg <- paste0("BSgenome.Hsapiens.UCSC.", genomeBuild)
+if (!require(bsg, character.only=TRUE, quietly=TRUE, warn.conflicts=FALSE)) {
+	seqinfo <- Seqinfo(genome=genomeBuild)
+} else {
+	seqinfo <- seqinfo(get(bsg))
+}
 seqlevelsStyle(chrs) <- genomeStyle
 
 ## get mean molecule length from LRsummaryFile

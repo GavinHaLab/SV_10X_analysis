@@ -8,9 +8,10 @@ def getLRFullPath(base, filename):
 def getTITANpath(base, id, ext):
   return glob.glob(''.join([base, "results/titan/optimalClusterSolution/", id, "_cluster*", ext]))
 
+CHRS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,'X']
+
 #TUM, CLUST = glob_wildcards("../../TITAN/snakemake/results/titan/optimalClusterSolution/{tum}_cluster1.titan.ichor.cna.txt")
 #SEG,CLUST = glob_wildcards(config["titanPath"], "/results/titan/optimalClusterSolution/{tumor}_cluster{clust}.titan.ichor.cna.txt")
-
 
 rule all:
   input: 
@@ -18,8 +19,9 @@ rule all:
   	expand("results/combineSVABAandTITAN/{tumor}/{tumor}.svabaTitan.cn.txt", tumor=config["pairings"]),
   	expand("results/combineSVABAandTITAN/{tumor}/{tumor}.svabaTitan.sv.bedpe", tumor=config["pairings"]),
   	expand("results/LongRangerSomaticSV/{tumor}/{tumor}.LR.somatic.sv.txt", tumor=config["pairings"]),
-  	expand("results/plotSVABAandTITAN/{tumor}", tumor=config["pairings"])
-
+  	#expand(directory("results/plotSVABAandTITAN/{tumor}"), tumor=config["pairings"])
+  	expand("results/plotSVABAandTITAN/{tumor}/{tumor}_CNA-SV-BX_{type}_chr{chr}.{format}", tumor=config["pairings"], type=config["plot_type"], chr=CHRS, format=config["plot_format"])
+  	
 rule getLongRangerSomaticSV:
 	input:
 		tumSVFile=lambda wildcards: getLRFullPath(config["samples"][wildcards.tumor], "large_sv_calls.bedpe"),
@@ -73,7 +75,7 @@ rule plotSVABAandTITAN:
 		titanSegFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".titan.ichor.seg.noSNPs.txt"),
 		titanParamFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".params.txt")
 	output:
-		"results/plotSVABAandTITAN/{tumor}"
+		"results/plotSVABAandTITAN/{tumor}/{tumor}_CNA-SV-BX_{type}_{chrs}.{format}"
 	params:
 		plotSVCNscript=config["plotSVCN_script"],
 		tenXfuncs=config["tenX_funcs"],
@@ -93,7 +95,7 @@ rule plotSVABAandTITAN:
 		size=config["plot_size"],
 		format=config["plot_format"]	
 	log:
-		"logs/plotSVABAandTITAN/{tumor}.log"
+		"logs/plotSVABAandTITAN/{tumor}/{tumor}_CNA-SV-BX_{type}_{chrs}.{format}.log"
 	shell:
 		"Rscript {params.plotSVCNscript} --id {wildcards.tumor} --tenX_funcs {params.tenXfuncs} --svaba_funcs {params.svabafuncs} --plot_funcs {params.plotfuncs} --titan_libdir {params.libdir} --svFile {input.svabaVCF} --titanBinFile {input.titanBinFile} --titanSegFile {input.titanSegFile} --titanParamFile {input.titanParamFile} --chrs \"{params.chrs}\" --genomeBuild {params.genomeBuild} --genomeStyle {params.genomeStyle} --cytobandFile {params.cytobandFile} --start {params.start} --end {params.end} --zoom {params.zoom} --plotYlim \"{params.ylim}\" --geneFile {params.geneFile} --plotCNAtype {params.type} --plotSize \"{params.size}\" --plotFormat {params.format} --outDir {output} > {log} 2> {log}" 
 	
