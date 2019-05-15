@@ -99,7 +99,13 @@ lrCol <- "lightgrey"
 grocCol <- "black"
 manualCol <- "blue"
 #seqinfo <- Seqinfo(genome=genomeBuild)
-seqinfo <- seqinfo(get("BSgenome.Hsapiens.UCSC.hg38"))
+bsg <- paste0("BSgenome.Hsapiens.UCSC.", genomeBuild)
+if (!require(bsg, character.only=TRUE, quietly=TRUE, warn.conflicts=FALSE)) {
+	seqinfo <- Seqinfo(genome=genomeBuild)
+} else {
+	seqinfo <- seqinfo(get(bsg))
+}
+
 
 if (zoom){
   xlim <- c(startPos, endPos)
@@ -154,6 +160,8 @@ if (!is.null(geneList) && geneList != "None"){
 }else{
   genes <- NULL
 }
+colnames(genes) <- c("Gene", "Chr", "Start", "End")
+seqlevelsStyle(genes$Chr) <- genomeStyle
 
 if (genomeBuild == "hg38" && file.exists(cytobandFile)){
   cytoband <- as.data.frame(fread(cytobandFile))

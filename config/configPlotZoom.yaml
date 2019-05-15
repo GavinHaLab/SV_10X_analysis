@@ -1,14 +1,7 @@
-## path to tools ##
-svaba_exe:  /path/to/svaba
-samTools:  /path/to/samtools
-
 ## path to scripts ##
 tenX_funcs:  code/tenX_utils.R
 svaba_funcs:  code/svaba_utils.R
 plot_funcs:  code/plotting.R
-bxRescue_script:  code/barCodeOverlap.R
-combineSVCN_script:  code/combineSVABAandTITAN.R
-getLRsomaticSV_script:  code/getLongRangerSomaticSV.R
 plotSVCN_script:  code/plotTitanSvaba.R
 
 ## path to TITAN snakemake root  ##
@@ -16,14 +9,9 @@ titan_libdir:  /path/to/TitanCNA/
 titan_results:  /path/to/TitanCNA/snakemake_results/
 
 ## reference files ##
-refGenome:  /path/to/ref/genome.fasta
 genomeBuild:  hg38
 genomeStyle:  UCSC
 cytobandFile:  data/cytoBand_hg38.txt # only need if hg38
-chrs:  c(1:22, \"X\")
-
-## LongRanger params ##
-bamFileName:  phased_possorted_bam.bam
 
 ## Plotting parameters ##
 ## include list of genes to annotate on plot

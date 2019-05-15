@@ -57,12 +57,25 @@ The first snakemake file [svaba.snakefile](svaba.snakefile) will
   b. Compute barcode overlap values for barcode rescue in the next step.
 ```
 # show commands and workflow
-snakemake -s svaba.snakefile.snakefile -np
+snakemake -s svaba.snakefile -np
 # run the workflow locally using 5 cores
 snakemake -s svaba.snakefile --cores 5
 ```
 
-## 2.  Invoking the snakemake workflow for SvABA on a cluster
+## 2. Integrating SV and copy number results ([TitanCNA](https://github.com/gavinha/TitanCNA_10X_snakemake))
+The second snakemake file [combineSvabaTitan.snakefile](combineSvabaTitan.snakefile) will 
+  a. Combine SvABA and [TitanCNA (10X analysis)](https://github.com/gavinha/TitanCNA_10X_snakemake) results to assign copy number to the breakpoints and rearrangement classes to the SV events.
+  b. Plot copy number and SV for each chromosome. 
+  ```
+  snakemake -s combineSvabaTitan.snakefile --cores 5
+  ```
+  
+The third snakemake file [plotSVandCNAzoom.snakefile](plotSVandCNAzoom.snakefile) generates custom plots zoomed in for a region of interest. Users can specify the coordinates in the [configPlotZoom.yaml](config/configPlotZoom.yaml) file. See the description of the configuration below.
+  ```
+  snakemake -s plotSVandCNAzoom.snakefile --cores 5
+  ```
+
+## 3.  Invoking the snakemake workflow for SvABA on a cluster
 If you are using a cluster, then these are resource settings for memory and runtime limits, and parallel environments.  
 These are the default settings for all tasks that do not have rule-specific resources.  
 There are two cluster configurations provided: `qsub` and `slurm`
@@ -81,34 +94,10 @@ Here, the `h_vmem` (max memory), `h_rt` (max runtime) are used. For `runSvaba` t
 #### ii. `slurm`
 There is only one file in use for `slurm`:
 	`config/cluster_slurm.yaml` - This file contains the memory, runtime, and number of cores for certain tasks. 
-To invoke the snakemake pipeline for `qsub`:
+To invoke the snakemake pipeline for `slurm`:
 ```
 snakemake -s svaba.snakefile --cluster-config config/cluster_slurm.yaml --cluster "sbatch -p {cluster.partition} --mem={cluster.mem} -t {cluster.time} -c {cluster.ncpus} -n {cluster.ntasks} -o {cluster.output}" -j 50
 ```
-
-## 2. Integrating SV and copy number results ([TitanCNA](https://github.com/gavinha/TitanCNA_10X_snakemake))
-The second snakemake file [combineSvabaTitan.snakefile](combineSvabaTitan.snakefile) will 
-  a. Combine SvABA and [TitanCNA (10X analysis)](https://github.com/gavinha/TitanCNA_10X_snakemake) results to assign copy number to the breakpoints and rearrangement classes to the SV events.
-  b. Plot copy number and SV for each chromosome. 
-  ```
-  snakemake -s combineSvabaTitan.snakefile --cores 5
-  #OR
-  snakemake -s combineSvabaTitan.snakefile --cluster-config config/cluster_slurm.yaml --cluster "sbatch -p {cluster.partition} --mem={cluster.mem} -t {cluster.time} -c {cluster.ncpus} -n {cluster.ntasks} -o {cluster.output}" -j 50
-  ```
-  
-  To generate custom zoomed-in plots for a region of interest, users can specify the coordinates in the [configPlotZoom.yaml](config/configPlotZoom.yaml) file as a template. Change the values in these fields, for example:
-  ```
-	plot_id: AR_enhancer_zoom
-	plot_zoom:  TRUE
-	plot_chrs:  c(\"X\") 
-	plot_startPos:  66500000
-	plot_endPos:  67900000
-	plot_geneFile:  data/AR_coord.txt ## include list of genes to annotate on plot
-	plot_ylim:  c(-2,6)
-	plot_size:  c(8,4)
-	plot_type:  ichor ## titan - will include haplotype fraction
-	plot_format:  png
-  ```
 
 # Configuration and settings
 All settings for the workflow are contained in [config/config.yaml](config/config.yaml). The settings are organized by paths to scripts and reference files and then by each step in the workflow.
@@ -139,7 +128,7 @@ titan_libdir:  /path/to/TitanCNA/
 ```
 
 ### 4. Path to TitanCNA 10X snakemake results
-Specifies the TitanCNA results to be merged with SvABA results in [combineSvabaTitan.snakefile](combineSvabaTitan.snakefile).
+Specifies the [TitanCNA 10X snakemake](https://github.com/gavinha/TitanCNA_10X_snakemake) location containing result files to be merged with SvABA results in [combineSvabaTitan.snakefile](combineSvabaTitan.snakefile).
 ```
 titan_results:  /path/to/TitanCNA/snakemake_results/
 ```
@@ -186,7 +175,6 @@ bxRescue_minReadOverlapSupport:  2
 
 ### 9. [combineSvabaTitan.snakefile](combineSvabaTitan.snakefile) settings: Plotting
 Settings used for plotting copy number and SV results.  
-- `plot_zoom` indicates the plot should be focused on a specific region smaller than a whole chromosome. If set to `TRUE`, then `plot_chrs` (should only be a single chr), `plot_startPos`, `plot_endPos` should be set.
 - `plot_geneFile` is a text file listing the regions to annotate in the plot. 4 column file: name, chr, start, stop.
 ```
 plot_zoom:  FALSE
@@ -197,6 +185,23 @@ plot_geneFile:  data/AR_coord.txt ## include list of genes to annotate on plot
 plot_ylim:  c(-2,6)
 plot_size:  c(8,4)
 plot_type:  titan ## titan - will include haplotype fraction
+plot_format:  png
+```
+
+### 10. [plotSVandCNAzoom.snakefile](plotSVandCNAzoom.snakefile) settings in [configPlotZoom.yaml](config/configPlotZoom.yaml)
+- `plot_id` to use for naming the output directory containing the zoomed plots for each sample.
+- `plot_zoom` indicates the plot should be focused on a specific region smaller than a whole chromosome. If set to `TRUE`, then `plot_chrs` (should only be a single chr), `plot_startPos`, `plot_endPos` should be set.
+- 'plot_type` is set to `ichor` for total copy number only (black dots). Set it to `titan` to also include the allelic fraction panel as a second track.
+```
+plot_id: AR_enhancer_zoom
+plot_zoom:  TRUE
+plot_chrs:  c(\"X\") 
+plot_startPos:  66500000
+plot_endPos:  67900000
+plot_geneFile:  data/AR_coord.txt ## include list of genes to annotate on plot
+plot_ylim:  c(-2,6)
+plot_size:  c(8,4)
+plot_type:  ichor ## use "titan" to also plot the allelic fraction panel 
 plot_format:  png
 ```
 

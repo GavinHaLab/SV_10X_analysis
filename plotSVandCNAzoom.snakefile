@@ -42,7 +42,7 @@ rule plotSVABAandTITAN:
 		size=config["plot_size"],
 		format=config["plot_format"]	
 	log:
-		"logs/plotSVABAandTITAN_zoom/{plotID}/{tumor}_{type}_chr{chr}-{start}-{end}.{format}.log"
+		"logs/plotSVABAandTITAN_zoom/{plotID}/{tumor}_CNA-SV_{type}_chr{chr}-{start}-{end}.{format}.log"
 	shell:
 		"Rscript {params.plotSVCNscript} --id {wildcards.tumor} --tenX_funcs {params.tenXfuncs} --svaba_funcs {params.svabafuncs} --plot_funcs {params.plotfuncs} --titan_libdir {params.libdir} --svFile {input.svabaVCF} --titanBinFile {input.titanBinFile} --titanSegFile {input.titanSegFile} --titanParamFile {input.titanParamFile} --chrs \"{params.chr}\" --genomeBuild {params.genomeBuild} --genomeStyle {params.genomeStyle} --cytobandFile {params.cytobandFile} --start {params.start} --end {params.end} --zoom {params.zoom} --plotYlim \"{params.ylim}\" --geneFile {params.geneFile} --plotCNAtype {params.type} --plotSize \"{params.size}\" --outPlotFile {output} > {log} 2> {log}" 
 	
