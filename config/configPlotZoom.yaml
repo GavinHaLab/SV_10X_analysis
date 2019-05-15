@@ -26,13 +26,15 @@ chrs:  c(1:22, \"X\")
 bamFileName:  phased_possorted_bam.bam
 
 ## Plotting parameters ##
+## include list of genes to annotate on plot
+plot_geneFile:  data/AR_coord.txt 
+
 ## if users want to zoom in on a specific region, here is an example ##
-plot_id: AR_enhancer_zoom
+plot_id: "AR_enhancer_zoom"
 plot_zoom:  TRUE
-plot_chrs:  c(\"X\") 
+plot_chr:  "X"
 plot_startPos:  66000000
 plot_endPos:  67000000
-plot_geneFile:  data/AR_coord.txt ## include list of genes to annotate on plot
 plot_ylim:  c(-2,6)
 plot_size:  c(8,4)
 plot_type:  titan ## titan - will include haplotype fraction
