@@ -306,7 +306,7 @@ convert2GRanges <- function(sv, buffer = 0){
 ###########################################
 ### LOAD VCF FILES AS DATA.TABLE BY CHR ###
 ###########################################
-loadVCFtoDataTableByChromosome <- function(svFiles, chrs = as.character(c(1:22, "X")), genomeStyle = "NCBI", genomeBuild = "hg19", minSPAN = 10000, minSPANBX = 10000, minBXOL = 0, maxBXOL = Inf, maxBXCount = 10000, minBSDsupport = 5, dupSV.bpDiff = 1000){
+loadVCFtoDataTableByChromosome <- function(svFiles, chrs = as.character(c(1:22, "X")), genomeStyle = "NCBI", genomeBuild = "hg19", applyFilter = TRUE, minSPAN = 10000, minSPANBX = 10000, minBXOL = 0, maxBXOL = Inf, maxBXCount = 10000, minBSDsupport = 5, dupSV.bpDiff = 1000){
   seqlevelsStyle(chrs) <- genomeStyle
   if (length(svFiles) > 0){ ## sv vcf file exists ##
       vcf <- tryCatch({
@@ -319,8 +319,10 @@ loadVCFtoDataTableByChromosome <- function(svFiles, chrs = as.character(c(1:22, 
   sv <- getSVfromCollapsedVCF(vcf, chrs = chrs, genomeStyle = genomeStyle)
   ## filter by BXOL support ##
   message("Filtering SVABA calls...")
-  sv <- filterSVABA(sv, minSPAN=minSPAN, minSPANBX=minSPANBX, minBXOL=minBXOL, maxBXOL=maxBXOL, maxBXCount=maxBXCount, dupSV.bpDiff=dupSV.bpDiff)
-   return(sv=sv)
+  if (applyFilter){
+  	sv <- filterSVABA(sv, minSPAN=minSPAN, minSPANBX=minSPANBX, minBXOL=minBXOL, maxBXOL=maxBXOL, maxBXCount=maxBXCount, dupSV.bpDiff=dupSV.bpDiff)
+  }
+  return(sv=sv)
 }
 
 filterSVABA <- function(x, minSPAN = 10000, minSPANBX = 10000, minBXOL = 0, maxBXOL = Inf, maxBXCount = 10000, dupSV.bpDiff = 1000){
@@ -776,6 +778,19 @@ annotateSVbetweenBkptsWithCN <- function(sv, cn, segs, buffer = 1e5,
   return(list(annot.cn=annot.cn, annot.seg=annot.seg, ind=ind))
 }
 
+########################################################################
+## output bedpe files ##
+########################################################################
+writeBedpeToFile <- function(sv, file){
+	sv.out <- copy(sv)
+	sv.out[, c("chrom1", "start1", "end1", "chrom2", "start2", "end2") := .(chromosome_1, start_1, start_1, chromosome_2, start_2, start_2)]
+	sv.out[, strand1 := { strand = rep("+", .N); strand[orient_1=="fwd"] = "-"; strand }]
+	sv.out[, strand2 := { strand = rep("+", .N); strand[orient_2=="fwd"] = "-"; strand }]
+	sv.out[, name := "."]; sv.out[, score := "."]
+	colNameOrder <- c("chrom1", "start1", "end1", "chrom2", "start2", "end2", "name", "score", "strand1", "strand2")
+	setcolorder(sv.out, c(colNameOrder, colnames(sv.out)[!colnames(sv.out) %in% colNameOrder]))
+	write.table(sv.out, file = file, col.names=T, row.names=F, quote=F, sep="\t", na=".")
+}
 
 ###########################################################
 ########## FIND CN BETWEEN ADJACENT BREAKPOINTS ###########

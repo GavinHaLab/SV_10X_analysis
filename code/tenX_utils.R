@@ -748,6 +748,144 @@ getSVfromBEDPE <- function(bedFile, chrs = c(1:22, "X"), skip=0, genomeStyle = "
 	return(copy(bed))
 }
 
+#######################################################
+### GROCSVS FUNCTIONS  #####
+#######################################################
+###########################################
+### Extract SV to data.frame from VCF #####
+###########################################
+getSVfromCollapsedVCF.GROC <- function(vcf, chrs = c(1:22, "X")){
+	if (class(vcf) == "CollapsedVCF"){
+		svGR <- as.data.frame(rowRanges(vcf))
+		svGR$ALT <- unlist(svGR$ALT)
+		bkpt2 <- str_match(svGR$ALT, "([chr0-9XY]+):(\\d+)")[, 2:3]
+		mateID <- info(vcf)$MATEID
+		ID <- names(rowRanges(vcf))
+		sv <- data.frame(chromosome_1=as.vector(svGR$seqnames), start_1=as.numeric(svGR$start), 
+									chromosome_2=bkpt2[, 1], start_2=as.numeric(bkpt2[, 2]), REF=svGR$REF,
+									mateID=mateID, alt_1=svGR$ALT, alt_2=NA, FILTER=rowRanges(vcf)$FILTER,
+									orient_1=NA, orient_2=NA, stringsAsFactors=FALSE)
+		rownames(sv) <- ID
+		# SPAN - need to comput this (-1 for interchr)
+		sv <- cbind(sv, SPAN = abs(sv$start_2 - sv$start_1 + 1))
+		sv$SPAN[sv$chromosome_1 != sv$chromosome_2] <- -1
+		## get breakpoint 2 alt ##
+		sv$alt_2 <- sv[sv$mateID, "alt_1"]
+		sv <- as.data.table(sv)
+ 		 # EVENT - event id
+		if (sum(rownames(info(header(vcf))) %in% c("EVENT")) > 0){
+			sv <- cbind(sv, EVENT = as.numeric(info(vcf)$EVENT))
+		}
+		if (sum(rownames(info(header(vcf))) %in% c("ASSEMBLED")) > 0){
+			sv <- cbind(sv, ASSEMBLED = info(vcf)$ASSEMBLED)
+		}
+		# GT - 0 if absent, 1 if present
+		if (sum(rownames(geno(header(vcf))) %in% c("GT")) > 0){
+		  sv <- cbind(sv, GT = geno(vcf)$GT)
+		}		
+		# BS - Number of barcodes supporting the event
+		if (sum(rownames(geno(header(vcf))) %in% c("BS")) > 0){
+		  sv <- cbind(sv, BS = geno(vcf)$BS)
+		}		
+		# BT - Total number of barcodes, calculated as the union of barcodes at each site
+		if (sum(rownames(geno(header(vcf))) %in% c("BT")) > 0){
+		  sv <- cbind(sv, BT = geno(vcf)$BT)
+		}			
+		# PR - p-value for the event, calculated by resampling from the number of supporting and total barcodes
+		if (sum(rownames(geno(header(vcf))) %in% c("PR")) > 0){
+			sv <- cbind(sv, PR = geno(vcf)$PR)
+		}
+		# H1x - String Number of supporting barcodes assigned to haplotype 1 (left side of breakpoint)
+		if (sum(rownames(geno(header(vcf))) %in% c("H1x")) > 0){
+			sv <- cbind(sv, H1x = geno(vcf)$H1x)
+		}
+		# H2x - String Number of supporting barcodes assigned to haplotype 2 (left side of breakpoint)
+		if (sum(rownames(geno(header(vcf))) %in% c("H2x")) > 0){
+			sv <- cbind(sv, H2x = geno(vcf)$H2x)
+		}
+		# H1y - String Number of supporting barcodes assigned to haplotype 1 (right side of breakpoint)
+		if (sum(rownames(geno(header(vcf))) %in% c("H1y")) > 0){
+			sv <- cbind(sv, H1y = geno(vcf)$H1y)
+		}
+		# H2y - String Number of supporting barcodes assigned to haplotype 2 (right side of breakpoint)
+		if (sum(rownames(geno(header(vcf))) %in% c("H2y")) > 0){
+			sv <- cbind(sv, H2y = geno(vcf)$H2y)
+		}
+		
+		## get orientation ##
+		## check the other alt to see how the current breakpoint is oriented
+		orient1 <- str_match(sv$alt_2, "\\]|\\[") 
+		orient2 <- str_match(sv$alt_1, "\\]|\\[")
+		sv$orient_1[orient1 == "]"] <- "rev"
+		sv$orient_1[orient1 == "["] <- "fwd"
+		sv$orient_2[orient2 == "]"] <- "rev"
+		sv$orient_2[orient2 == "["] <- "fwd"
+	}else{
+		message("vcf object is not a CollapsedVCF")
+		sv <- NULL
+	}
+	
+	#sv <- data.table(sv)
+	sv <- sv[!is.na(sv$chromosome_1) & !is.na(sv$chromosome_2), ]
+	sv <- sv[sv$chromosome_1 %in% chrs & sv$chromosome_2 %in% chrs, ]
+	sv <- removeDupSV.GROC(sv)
+	sv <- sv[order(chromosome_1, start_1)]
+	return(sv)
+}
+
+##########################################
+########## FILTER VCF BY SUPPORT #########
+##########################################
+### load GROCSVS vcf file ###
+loadGROCSVSVCFtoDataTable <- function(svFile, tumorId, normId = NULL, chrs = c(1:22, "X"),
+    filterFlags = c("PASS", "NOLONGFRAGS", "NEARBYSNVS", "NEARBYSNVS;NOLONGFRAGS"), 
+    minBXOL = 3, absentBXOL = 1, pValThreshold = 0.1){
+  vcf <- tryCatch({
+    message("Loading grocsvs vcf ", svFile)
+    readVcf(svFile, genome = "hg19")
+  }, error = function(x){ 
+    return(NA) 
+  })
+  if (is.null(vcf)){
+    stop("Can't find GROCSVS vcf ", svFile)
+  }
+  sv <- getSVfromCollapsedVCF.GROC(vcf, chrs = chrs)
+  if (nrow(sv) == 0){
+    stop("No usable breakpoints.")
+  }
+  ids <- as.vector(na.omit(str_match(colnames(sv), "GT.(.+)")[,2]))
+  id <- tumorId
+  if (is.null(normId)){
+    normId <- setdiff(ids, id)[1] # get the only remaining id which should be normal
+  }
+  somaticColId <- paste0("SOMATIC.", id)
+  supportColId <- paste0("SUPPORT.", id)
+  bxolColId <- paste0("BS.",id)
+## filter by BXOL support ##
+  sv[[supportColId]] <- NA
+  sv[[somaticColId]] <- NA
+  # filter by FILTER flag #
+  indFilter <- sv$FILTER %in% filterFlags
+  # filter by GT (presence in tumor sample but not in normal sample)
+  indSomatic <- as.numeric(sv[[paste0("GT.", id)]]) == 1 & as.numeric(sv[[paste0("GT.", normId)]]) == 0
+  # filter by supporting barcode counts #
+  indBXOL <- sv[[bxolColId]] >= minBXOL & sv[[paste0("BS.",normId)]] <= absentBXOL
+  # filter by haplotype overlaps #
+  indHaplotype <- (as.numeric(sv[[paste0("H1x.", id)]]) >= minBXOL & as.numeric(sv[[paste0("H1y.", id)]]) >= minBXOL & 
+      as.numeric(sv[[paste0("H2x.", id)]]) <= absentBXOL & as.numeric(sv[[paste0("H2y.", id)]]) <= absentBXOL) |
+      (as.numeric(sv[[paste0("H1x.", id)]]) <= absentBXOL & as.numeric(sv[[paste0("H1y.", id)]]) <= absentBXOL & 
+      as.numeric(sv[[paste0("H2x.", id)]]) >= minBXOL & as.numeric(sv[[paste0("H2y.", id)]]) >= minBXOL)  
+  # filter by p-value #
+  #sv$PR <= pValThreshold
+  sv[[supportColId]][indBXOL] <- "BXOL"
+  sv[[supportColId]][indHaplotype] <- "UNIQUE_HAPLOTYPE"
+  sv[[somaticColId]][indSomatic] <- TRUE
+ 
+  # sort breakpoint pairs: interchr - chromosome order; intrachr - coordinate order
+  sv <- sortBkptPairOrder(sv)
+  return(sv)
+}
+
 
 ##############################################
 ########## FIND OVERLAPPING SVS ##############
@@ -805,4 +943,20 @@ removeDupSV.LR <- function(sv){
 #	 }
 	return(sv)
 }
+
+##########################################
+##### remove duplicate breakpoints #######
+##########################################
+removeDupSV.GROC <- function(sv){
+	bkpts <- unique(str_extract(sv$mateID, "(\\d+)"))
+	keepInd <- NULL
+	for (i in 1:length(bkpts)){
+	  ind <- which(grepl(paste0("^", bkpts[i], ":"), sv$mateID))
+	  keepInd <- c(keepInd, ind[order(sv[ind, start_1]) == 1])
+	}
+	sv <- sv[keepInd, ] ## keep 1st mate in pair 
+#	 }
+	return(sv)
+}
+
 

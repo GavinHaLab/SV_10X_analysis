@@ -16,8 +16,7 @@ rule all:
 		
 rule plotSVABAandTITAN:
 	input:
-		svabaVCF="results/combineSVABAandTITAN/{tumor}/{tumor}.svabaTitan.sv.txt",
-		#svabaVCF=expand("results/combineSVABAandTITAN/{tumor}/{tumor}.svabaTitan.sv.txt", tumor=config["pairings"]),
+		svabaVCF=config["combined_SV_CNA_results"] + "{tumor}/{tumor}.svabaTitan.sv.PoNfilter.bedpe",
 		titanBinFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".titan.ichor.cna.txt"),
 		titanSegFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".titan.ichor.seg.noSNPs.txt"),
 		titanParamFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".params.txt")

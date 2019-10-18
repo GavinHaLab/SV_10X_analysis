@@ -96,7 +96,7 @@ arr.col <- NULL
 svabaCol <- "black"
 rescueCol <- "purple"
 lrCol <- "lightgrey"
-grocCol <- "black"
+grocCol <- "blue"
 manualCol <- "blue"
 #seqinfo <- Seqinfo(genome=genomeBuild)
 bsg <- paste0("BSgenome.Hsapiens.UCSC.", genomeBuild)

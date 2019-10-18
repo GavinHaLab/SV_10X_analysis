@@ -8,7 +8,8 @@
 
 library(optparse)
 option_list <- list(
-	make_option(c("--id"), type = "character", help = "Sample ID"),
+	make_option(c("--tumID"), type = "character", help = "Tumor sample ID"),
+	make_option(c("--normID"), type = "character", help = "Matched normal sample ID"),
 	make_option(c("--tenX_funcs"), type = "character", help = "Path to file containing 10X R functions to source."),
 	make_option(c("--svaba_funcs"), type = "character", help = "Path to file containing SVABA R functions to source."),
 	make_option(c("--svabaVCF"), type="character", help = "Path to SVABA barcode rescue VCF file."),
@@ -16,6 +17,7 @@ option_list <- list(
 	make_option(c("--titanSegFile"), type="character", help = "Path to TITAN segs.txt output file."),
 	make_option(c("--LRsvFile"), type="character", help = "Path to Long Ranger SV call files."),
 	make_option(c("--LRsummaryFile"), type="character", help = "Path to Long Ranger summary.csv file."),
+	make_option(c("--grocsvsFile"), type="character", help="Path to GROCSVS output PostprocessingStep/svs.vcf file."),
 	make_option(c("--genomeBuild"), type="character", default="hg19", help = "Genome build: hg19 or hg38. Default [%default]"),
 	make_option(c("--genomeStyle"), type = "character", default = "NCBI", help = "NCBI or UCSC chromosome naming convention; use UCSC if desired output is to have \"chr\" string. [Default: %default]"),
 	make_option(c("--chrs"), type = "character", default = "c(1:22, 'X')", help = "Chromosomes to analyze; string [Default: %default"),
@@ -42,12 +44,14 @@ print(opt)
 source(opt$svaba_funcs)
 source(opt$tenX_funcs)
 
-tumId <- opt$id
+tumId <- opt$tumID
+normId <- opt$normID
 svabaVCF <- opt$svabaVCF
 cnFile <- opt$titanBinFile
 segFile <- opt$titanSegFile
 LRsummaryFile <- opt$LRsummaryFile
 LRsvFile <- opt$LRsvFile
+grocsvsFile <- opt$grocsvsFile 
 outputSVFile <- opt$outputSVFile
 outputCNFile <- opt$outputCNFile
 outputBedpeFile <- opt$outputBedpeFile
@@ -180,6 +184,20 @@ svaba <- svaba[!is.na(support)]
 save.image(outImage)
 
 ######################################
+############ LOAD GROCVSV ############
+######################################
+# use current tumor id based on svaba file #
+# get normal from sample list #
+groc <- loadGROCSVSVCFtoDataTable(grocsvsFile, tumId, normId, chrs = chrs, filterFlags = filterFlags, minBXOL = minBXOL, absentBXOL = absentBXOL, pValThreshold = pValThreshold)
+groc <- groc[get(paste0("SOMATIC.",tumId))==TRUE] # keep somatic events only
+groc[, support := get(paste0("SUPPORT.",tumId))]
+groc <- cbind(Sample = tumId, SV.id = 1:nrow(groc), groc)
+## set up GROCSVS cluster event numbers only for clusters with > 1 events
+groc.clust <- groc[EVENT %in% groc[duplicated(EVENT), EVENT], .(SV.id, EVENT)]
+groc.clust <- as.data.frame(groc.clust); rownames(groc.clust) <- groc.clust[,1]
+
+
+######################################
 ########### LOAD LONGRANGER ##########
 ######################################
 message("Loading Long Ranger results ", LRsvFile)
@@ -196,6 +214,8 @@ lr <- sortBkptPairOrder(lr)
 message("Combining SVABA and Long Ranger SV calls...") 
 ## find overlap between SVABA and LONGRANGER ##
 # assumes breakpoint 1 is always upstream of breakpoint 2 for intra chromosome events #
+## find overlap between SVABA and GROC ##
+# assumes breakpoint 1 is always upstream of breakpoint 2 for intra chromosome events #
 svaba.1 <- copy(svaba) #breakpoint 1
 setnames(svaba.1, c("chromosome_1"), c("chr"))
 svaba.1[, start := start_1 - sv.buffer]; svaba.1[, end := start_1 + sv.buffer]
@@ -204,7 +224,14 @@ svaba.2 <- copy(svaba) #breakpoint 2
 setnames(svaba.2, c("chromosome_2"), c("chr"))
 svaba.2[, start := start_2 - sv.buffer]; svaba.2[, end := start_2 + sv.buffer]
 svaba.2 <- as(svaba.2, "GRanges")
-
+groc.1 <- copy(groc)
+setnames(groc.1, c("chromosome_1"), c("chr"))
+groc.1[, start := start_1 - sv.buffer]; groc.1[, end := start_1 + sv.buffer]
+groc.1 <- as(groc.1, "GRanges")
+groc.2 <- copy(groc)
+setnames(groc.2, c("chromosome_2"), c("chr"))
+groc.2[, start := start_2 - sv.buffer]; groc.2[, end := start_2 + sv.buffer]
+groc.2 <- as(groc.2, "GRanges")
 lr.1 <- copy(lr)
 setnames(lr.1, c("chromosome_1"), c("chr"))
 lr.1[, start := start_1 - sv.buffer]; lr.1[, end := start_1 + sv.buffer]
@@ -214,28 +241,57 @@ setnames(lr.2, c("chromosome_2"), c("chr"))
 lr.2[, start := start_2 - sv.buffer]; lr.2[, end := start_2 + sv.buffer]
 lr.2 <- as(lr.2, "GRanges")
 # overlap of first breakpoint #
+hits.svaba.groc.1 <- findOverlaps(query=svaba.1, subject=groc.1)
+hits.svaba.groc.2 <- findOverlaps(query=svaba.2, subject=groc.2)
 hits.svaba.lr.1 <- findOverlaps(query=svaba.1, subject=lr.1)
 hits.svaba.lr.2 <- findOverlaps(query=svaba.2, subject=lr.2)
+hits.lr.groc.1 <- findOverlaps(query=lr.1, subject=groc.1)
+hits.lr.groc.2 <- findOverlaps(query=lr.2, subject=groc.2)
+
+#svaba + groc #
+svaba.groc.ind <- rbind(data.frame(hits.svaba.groc.1), data.frame(hits.svaba.groc.2))
+svaba.groc.ind <- svaba.groc.ind[duplicated(svaba.groc.ind), ]
+svaba[svaba.groc.ind$queryHits, overlap.GROCSVS.id := groc[svaba.groc.ind$subjectHits, SV.id]]
+groc[svaba.groc.ind$subjectHits, overlap.SVABA.id := svaba[svaba.groc.ind$queryHits, SV.id]]
 
 # svaba + lr #
 svaba.lr.ind <- rbind(data.frame(hits.svaba.lr.1), data.frame(hits.svaba.lr.2))
 svaba.lr.ind <- svaba.lr.ind[duplicated(svaba.lr.ind), ]
 svaba[svaba.lr.ind$queryHits, overlap.LONGRANGER.id := lr[svaba.lr.ind$subjectHits, SV.id]]
 lr[svaba.lr.ind$subjectHits, overlap.SVABA.id := svaba[svaba.lr.ind$queryHits, SV.id]]
+
+# lr + groc #
+lr.groc.ind <- rbind(data.frame(hits.lr.groc.1), data.frame(hits.lr.groc.2))
+lr.groc.ind <- lr.groc.ind[duplicated(lr.groc.ind), ]
+lr[lr.groc.ind$queryHits, overlap.GROCSVS.id := groc[lr.groc.ind$subjectHits, SV.id]]
+groc[lr.groc.ind$subjectHits, overlap.LONGRANGER.id := lr[lr.groc.ind$queryHits, SV.id]]
+
+## assign overlaps to original svaba - since svaba is filtered from svabaAll
+svabaAll[svaba[!is.na(overlap.GROCSVS.id), SV.id], overlap.GROCSVS.id := svaba[!is.na(overlap.GROCSVS.id), overlap.GROCSVS.id]]
+svabaAll[svaba[!is.na(overlap.LONGRANGER.id), SV.id], overlap.LONGRANGER.id := svaba[!is.na(overlap.LONGRANGER.id), overlap.LONGRANGER.id]]
+svabaAll[svaba$SV.id, overlap.SVABA.id := SV.id]
+
 svaba[, overlap.SVABA.id := SV.id]
+groc[, overlap.GROCSVS.id := SV.id]
 lr[, overlap.LONGRANGER.id := SV.id]
 
 ## combine to save data.table ##
-keepColNames <- c("Sample", "SV.id", "chromosome_1", "start_1", "chromosome_2", "start_2", "alt_1", "alt_2", "FILTER", "SPAN", "orient_1", "orient_2", "support", "overlap.SVABA.id", "overlap.LONGRANGER.id")
+## combine SVABA, GROC, LONGRANGER ##
+keepColNames <- c("Sample", "SV.id", "chromosome_1", "start_1", "chromosome_2", "start_2", "alt_1", "alt_2", "FILTER", "SPAN", "orient_1", "orient_2", "support", "overlap.SVABA.id", "overlap.GROCSVS.id", "overlap.LONGRANGER.id")
 bothSV <- rbind(cbind(Tool="SVABA", svaba[, keepColNames, with=F]),
+								cbind(Tool="GROCSVS", groc[, keepColNames, with=F]),
 							  cbind(Tool="LONGRANGER", lr[, keepColNames[-c(7,8)], with=F]), fill=T)
-#bothSV <- cbind(SV.combined.id = 1:nrow(bothSV), bothSV, Mean.Molecule.Length = meanLength)
+bothSV[overlap.GROCSVS.id %in% groc.clust$SV.id, GROCSVS.cluster := groc.clust[as.character(overlap.GROCSVS.id), 2]]
+bothSV <- cbind(SV.combined.id = 1:nrow(bothSV), bothSV, Mean.Molecule.Length = meanLength)
 bothSV[, type := getSVType(bothSV, minColSPAN = minSPAN, minTrans = minTrans)]#, maxInvSPAN = maxInvSPAN, maxFBISPAN = maxFBISPAN)]
+#bothSV[, CN_overlap_type := "Complex"]
 
 ## get uniq events - shorten the SV list ##
 bothSV.uniq <- keepUniqSVcall(bothSV, "SVABA")
+bothSV.uniq <- keepUniqSVcall(bothSV.uniq, "GROCSVS")
+#bothSV.uniq <- keepUniqSVcall(bothSV.uniq, "LONGRANGER")
 bothSV.all <- copy(bothSV)
-bothSV.uniq <- cbind(SV.combined.id = 1:nrow(bothSV.uniq), bothSV.uniq, Mean.Molecule.Length = meanLength)
+#bothSV <- copy(bothSV.uniq)
 
 ## output to files ##
 message("Output combined SV calls to files...")
@@ -243,6 +299,8 @@ outFile <- paste0(outDir, "/", tumId, "_svaba.txt")
 write.table(svaba, file=outFile, col.names=T, row.names=F, quote=F, sep="\t")
 outFile <- paste0(outDir, "/", tumId, "_longranger.txt")
 write.table(lr, file=outFile, col.names=T, row.names=F, quote=F, sep="\t")
+outFile <- paste0(outDir, "/", tumId, "_groc.txt")
+write.table(groc, file=outFile, col.names=T, row.names=F, quote=F, sep="\t")
 outFile <- paste0(outDir, "/", tumId, "_combinedSVuniq.txt")
 write.table(bothSV, file=outFile, col.names=T, row.names=F, quote=F, sep="\t")
 
@@ -479,6 +537,13 @@ message("Filtering events with no class - usually short inversions and deletions
 sv <- sv[!is.na(CN_overlap_type)]
 
 ########################################################################
+## filter events with coordinate of 0 (longranger & svaba) ##
+########################################################################
+message("Filtering events with coordinates of zero (Long Ranger)")
+sv <- sv[!(start_1 == 0 | start_2 == 0)]
+
+
+########################################################################
 ## inverted duplications (templated insertions?) ##
 ########################################################################
 # use segment overlap and 
@@ -524,3 +589,5 @@ write.table(segs, file=outputCNFile, col.names=T, row.names=F, quote=F, sep="\t"
 ## output bedpe files ##
 ########################################################################
 writeBedpeToFile(sv, file=outputBedpeFile)
+
+

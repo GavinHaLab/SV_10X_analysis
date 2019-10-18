@@ -4,6 +4,9 @@ svaba_funcs:  code/svaba_utils.R
 plot_funcs:  code/plotting.R
 plotSVCN_script:  code/plotTitanSvaba.R
 
+## path to Combined SVABA and TITAN results ##
+combined_SV_CNA_results: results/combineSvabaGrocsvsTitan/
+
 ## path to TITAN snakemake root  ##
 titan_libdir:  /path/to/TitanCNA/
 titan_results:  /path/to/TitanCNA/snakemake_results/

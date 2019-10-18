@@ -19,7 +19,8 @@ option_list <- list(
 	make_option(c("--genomeStyle"), type = "character", default = "NCBI", help = "NCBI or UCSC chromosome naming convention; use UCSC if desired output is to have \"chr\" string. [Default: %default]"),
 	make_option(c("--chrs"), type = "character", default = "c(1:22, 'X')", help = "Chromosomes to analyze; string [Default: %default"),
 	make_option(c("--outDir"), type="character", help="Path to output directory."),
-	make_option(c("--outputSVFile"), type="character", help="Path to output SV file with new annotations.")
+	make_option(c("--outputSVFile"), type="character", help="Path to output SV file with new annotations."),
+	make_option(c("--outputNormSVFile"), type="character", help="Path to output matched normal SVs with new annotations.")
 	)
 
 parseobj <- OptionParser(option_list=option_list, usage = "usage: Rscript %prog [options]")
@@ -42,6 +43,7 @@ tumDeletionFile <- opt$tumDeletionFile
 normDeletionFile <- opt$normDeletionFile
 includeShortDeletions <- opt$includeShortDeletions
 outputSVFile <- opt$outputSVFile
+outputNormSVFile <- opt$outputNormSVFile
 outDir <- opt$outDir
 dir.create(outDir, recursive = TRUE)
 outImage <- paste0(outDir, "/", id, ".RData")
@@ -101,6 +103,7 @@ tum.sv.del[, SV.id := 1:nrow(tum.sv.del)] # reassign SV.id
 tum.sv.del <- tum.sv.del[!is.na(orient_1) & !is.na(orient_2)]
 
 write.table(tum.sv.del, file = outputSVFile, col.names=T, row.names=F, quote=F, sep="\t")
+write.table(norm.sv.del, file = outputNormSVFile, col.names=T, row.names=F, quote=F, sep="\t")
 save.image(outImage)
 
 

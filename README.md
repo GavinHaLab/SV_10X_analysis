@@ -121,7 +121,7 @@ plotSVCN_script:  code/plotTitanSvaba.R
 ```
 
 ### 3. Path to R package files
-Specify the directory in which [TitanCNA](https://github.com/gavinha/TitanCNA) are installed.  
+Specify the directory in which [TitanCNA](https://github.com/gavinha/TitanCNA) is installed.  
 *Set these if the R files in these libraries have been modified or updated but not yet installed or updated in R*.
 ```
 titan_libdir:  /path/to/TitanCNA/
