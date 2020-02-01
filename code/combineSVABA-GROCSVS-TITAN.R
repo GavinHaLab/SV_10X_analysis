@@ -324,7 +324,7 @@ cn <- fread(cnFile)
 cn <- unique(cn[, .(Sample, Chr, Start, End, LogRatio, logR_Copy_Number, Corrected_Copy_Number, Corrected_Call)])
 cn <- cn[!is.na(Start) & !is.na(End)]
 cn <- cbind(CN.id = 1:nrow(cn), cn)	
-sv[, Ploidy.medianCN := median(cn$Corrected_Copy_Number)]
+sv[, Ploidy.medianCN := median(cn$Corrected_Copy_Number, na.rm = TRUE)]
 ## annotate bin CN to prev/next of both breakpoints
 cn[, Corrected_Copy_Number := round(logR_Copy_Number)]
 cn[, Corrected_Copy_Number_prev := c(NA, Corrected_Copy_Number[-.N]), by = Chr]

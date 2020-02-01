@@ -198,6 +198,8 @@ if (yaxis == "integer"){
 # exclude data points not analyzed by titan
 if (plotType == "titan"){
 	ulp <- ulp[!is.na(Corrected_Call)]
+}else{
+  ulp[is.na(Corrected_Call), Corrected_Call := "NEUT"]
 }
 ulp <- ulp[Chr %in% chrStr]
 ulp$Chr <- factor(ulp$Chr, levels = chrStr)

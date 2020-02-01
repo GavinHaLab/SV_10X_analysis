@@ -112,9 +112,10 @@ germSV.ind <- sv.filt[SV.PoN.count_1 >= minFreqPoNSVBkptOverlap | SV.PoN.count_2
 	SV.blacklist.count_1 >= minFreqPoNBlackList | SV.blacklist.count_2 >= minFreqPoNBlackList,
 	which = TRUE]
 
-## output filtered SV table to file ##
-fwrite(sv.filt[-germSV.ind, ], file=outputSVFiltFile, col.names=T, row.names=F, quote=F, sep="\t")
-
+## output filtered SV table to tsv file ##
+#fwrite(sv.filt[-germSV.ind, ], file=outputSVFiltFile, col.names=T, row.names=F, quote=F, sep="\t")
+## output filtered SV table to bedpe file ##
+writeBedpeToFile(sv.filt[-germSV.ind, ], file=outputSVFiltFile)
 
 ## collect summary counts ##
 germSV.tool.counts <- sv.filt[germSV.ind, table(Sample, Tool)]

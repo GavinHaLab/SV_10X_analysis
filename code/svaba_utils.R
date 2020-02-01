@@ -229,8 +229,8 @@ sortBkptPairOrder <- function(sv.unsort, chrs = c(1:22, "X", "Y")){
   message("Re-assigning order for ", length(ind), " breakpoints.")
   #b1.colnames <- c("chromosome_1", "start_1", "alt_1", "orient_1", grep("\\.1", colnames(sv), value=T))
   #b2.colnames <- c("chromosome_2", "start_2", "alt_2", "orient_2", grep("\\.2", colnames(sv), value=T))
-  b1.colnames <- grep("\\.1|\\_1", colnames(sv), value=T)
-  b2.colnames <- grep("\\.2|\\_2", colnames(sv), value=T)
+  b1.colnames <- na.omit(grep("\\.1|\\_1", colnames(sv), value=T)[1:4])
+  b2.colnames <- na.omit(grep("\\.2|\\_2", colnames(sv), value=T)[1:4])
   sv.tmp <- cbind(sv[ind, b1.colnames, with=F])
   sv[ind, (b1.colnames) := sv[ind, b2.colnames, with=F]]
   sv[ind, (b2.colnames) := sv.tmp]
