@@ -291,14 +291,23 @@ for (j in 1:length(chrStr)){
                   endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
     ## plot BX Rescue arcs ##
     message("Plotting CN rescue")
-    plotRearrangementArcs(sv[Tool=="SVABA" & (support=="CN")], 
+    plotRearrangementArcs(sv[Tool=="SVABA" & support %in% c("BX,CN1","BX,CN2","SVABA,CN1","SVABA,CN2") &
+                          CN_overlap_type != "Unknown-ShortSVwithCN"], 
     							cn=as.data.frame(ulp), 
     							chr=chrStr[j], interchr = interchr, plotAtCentre = plotAtCentre,
                   xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
                   centreLine=centreLine, buffer=buffer, lcol=svabaCol, arr.col=svabaCol, 
                   endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
+    # message("Plotting CN rescue - short SVs")
+    # plotRearrangementArcs(sv[Tool=="SVABA" & support %in% c("BX,CN1","BX,CN2","SVABA,CN1","SVABA,CN2") &
+    #                       CN_overlap_type == "Unknown-ShortSVwithCN"], 
+    #               cn=as.data.frame(ulp), 
+    #               chr=chrStr[j], interchr = interchr, plotAtCentre = plotAtCentre,
+    #               xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
+    #               centreLine=centreLine, buffer=buffer, lcol=rescueCol, arr.col=rescueCol, 
+    #               endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
     message("Plotting BX rescue")
-    plotRearrangementArcs(sv[Tool=="SVABA" & (support=="BX")], 
+    plotRearrangementArcs(sv[Tool=="SVABA" & (support %in% c("BX"))], 
     							cn=as.data.frame(ulp), 
     							chr=chrStr[j], interchr = interchr, plotAtCentre = plotAtCentre,
                   xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,

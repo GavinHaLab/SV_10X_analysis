@@ -84,9 +84,9 @@ sv.1[queryHits(hits1), SV.blacklist.count := blist[subjectHits(hits1), SVsampleC
 sv.2[, SV.blacklist.count := as.integer(0)]
 sv.2[queryHits(hits2), SV.blacklist.count := blist[subjectHits(hits2), SVsampleCounts]]
 sv.1[, SV.blacklist.medianSVs := as.integer(0)]
-sv.1[queryHits(hits1), SV.blacklist.count := median(blist[subjectHits(hits1), SVbkptCounts], na.rm=T)]
+sv.1[queryHits(hits1), SV.blacklist.medianSVs := median(blist[subjectHits(hits1), SVbkptCounts], na.rm=T)]
 sv.2[, SV.blacklist.medianSVs := as.integer(0)]
-sv.2[queryHits(hits2), SV.blacklist.count := median(blist[subjectHits(hits2), SVbkptCounts], na.rm=T)]
+sv.2[queryHits(hits2), SV.blacklist.medianSVs := median(blist[subjectHits(hits2), SVbkptCounts], na.rm=T)]
 #tile.dt.bl <- merge(x=tile.dt, y=blist, by=c("seqnames", "start", "end", "width", "strand"), suffixes = c("", ".blacklist"))
 
 sv[, SV.PoN.count_1 := sv.1$SV.PoN.count]
@@ -102,9 +102,9 @@ writeBedpeToFile(sv, file=outputSVAnnotFile)
 ###########################################################
 ######## FILTER SV BASED ON PON AND BLACK LIST ############
 ###########################################################
-numSamples <- length(unique(sv$Sample))
-minNumPoNSV <- ceiling(numSamples * minFreqPoNSVBkptOverlap)
-minNumPoNBlackList <- ceiling(numSamples * minFreqPoNBlackList)
+# numSamples <- length(unique(sv$Sample))
+# minNumPoNSV <- ceiling(numSamples * minFreqPoNSVBkptOverlap)
+# minNumPoNBlackList <- ceiling(numSamples * minFreqPoNBlackList)
 
 sv.filt <- sv[!(start_1 == 0 | start_2 == 0)]
 
@@ -115,7 +115,10 @@ germSV.ind <- sv.filt[SV.PoN.count_1 >= minFreqPoNSVBkptOverlap | SV.PoN.count_2
 ## output filtered SV table to tsv file ##
 #fwrite(sv.filt[-germSV.ind, ], file=outputSVFiltFile, col.names=T, row.names=F, quote=F, sep="\t")
 ## output filtered SV table to bedpe file ##
-writeBedpeToFile(sv.filt[-germSV.ind, ], file=outputSVFiltFile)
+if (length(germSV.ind) > 0){
+	sv.filt <- sv.filt[-germSV.ind, ]
+}
+writeBedpeToFile(sv.filt, file=outputSVFiltFile)
 
 ## collect summary counts ##
 germSV.tool.counts <- sv.filt[germSV.ind, table(Sample, Tool)]

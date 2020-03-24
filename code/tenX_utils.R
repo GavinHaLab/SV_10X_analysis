@@ -838,8 +838,7 @@ getSVfromCollapsedVCF.GROC <- function(vcf, chrs = c(1:22, "X")){
 ##########################################
 ### load GROCSVS vcf file ###
 loadGROCSVSVCFtoDataTable <- function(svFile, tumorId, normId = NULL, chrs = c(1:22, "X"),
-    filterFlags = c("PASS", "NOLONGFRAGS", "NEARBYSNVS", "NEARBYSNVS;NOLONGFRAGS"), 
-    minBXOL = 3, absentBXOL = 1, pValThreshold = 0.1){
+    filterFlags = NULL, minBXOL = 3, absentBXOL = 1, pValThreshold = 0.1){
   vcf <- tryCatch({
     message("Loading grocsvs vcf ", svFile)
     readVcf(svFile, genome = "hg19")
@@ -865,6 +864,9 @@ loadGROCSVSVCFtoDataTable <- function(svFile, tumorId, normId = NULL, chrs = c(1
   sv[[supportColId]] <- NA
   sv[[somaticColId]] <- NA
   # filter by FILTER flag #
+  if (is.null(filterFlags)){
+    filterFlags <- sv[, unique(FILTER)]
+  }
   indFilter <- sv$FILTER %in% filterFlags
   # filter by GT (presence in tumor sample but not in normal sample)
   indSomatic <- as.numeric(sv[[paste0("GT.", id)]]) == 1 & as.numeric(sv[[paste0("GT.", normId)]]) == 0
