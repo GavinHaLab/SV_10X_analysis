@@ -29,8 +29,9 @@ rule all:
 	"results/panelOfNormalsSV/PoNBlacklistBins.txt",
 	expand("results/combineSvabaGrocsvsTitan/{tumor}/{tumor}.svabaTitan.sv.annotPoN.bedpe", tumor=config["pairings"]),
 	expand("results/combineSvabaGrocsvsTitan/{tumor}/{tumor}.svabaTitan.sv.PoNfilter.bedpe", tumor=config["pairings"]),
-  	expand("results/plotSvabaGrocsvsTitan/{tumor}/{tumor}_CNA-SV-BX_{type}_chr{chr}.{format}", tumor=config["pairings"], type=config["plot_type"], chr=CHRS, format=config["plot_format"])
-  		
+  	expand("results/plotSvabaGrocsvsTitan/{tumor}/{tumor}_CNA-SV-BX_{type}_chr{chr}.{format}", tumor=config["pairings"], type=config["plot_type"], chr=CHRS, format=config["plot_format"]),
+   	expand("results/plotCircos/{tumor}/{tumor}_Circos.pdf", tumor=config["pairings"])
+ 		
 rule getLongRangerSomaticSV:
 	input:
 		tumSVFile=lambda wildcards: getLRFullPath(config["samples"][wildcards.tumor], "large_sv_calls.bedpe"),
@@ -148,5 +149,19 @@ rule plotSvabaGrocsvsTitan:
 		"logs/plotSvabaGrocsvsTitan/{tumor}/{tumor}_CNA-SV-BX_{type}_chr{chr}.{format}.log"
 	shell:
 		"Rscript {params.plotSVCNscript} --id {wildcards.tumor} --tenX_funcs {params.tenXfuncs} --svaba_funcs {params.svabafuncs} --plot_funcs {params.plotfuncs} --titan_libdir {params.libdir} --svFile {input.svabaVCF} --titanBinFile {input.titanBinFile} --titanSegFile {input.titanSegFile} --titanParamFile {input.titanParamFile} --chrs {wildcards.chr} --genomeBuild {params.genomeBuild} --genomeStyle {params.genomeStyle} --cytobandFile {params.cytobandFile} --start {params.start} --end {params.end} --zoom {params.zoom} --plotYlim \"{params.ylim}\" --geneFile {params.geneFile} --plotCNAtype {params.type} --plotSize \"{params.size}\" --outPlotFile {output} > {log} 2> {log}" 
-	
+
+rule plotCircos:
+	input:
+		svabaTitanBedpe="results/combineSvabaGrocsvsTitan/{tumor}/{tumor}.svabaTitan.sv.annotPoN.bedpe",
+		svabaTitanCN="results/combineSvabaGrocsvsTitan/{tumor}/{tumor}.svabaTitan.cn.txt"
+	output:
+		"results/plotCircos/{tumor}/{tumor}_Circos.pdf"
+	params:
+		plotCIRCOSscript=config["plotCircos_script"],
+		genomeBuild=config["genomeBuild"]
+	log:
+		"logs/plotCircos/{tumor}/{tumor}_Circos.log"
+	shell:
+		"Rscript {params.plotCIRCOSscript} --id {wildcards.tumor} --svFile {input.svabaTitanBedpe} --cnFile {input.svabaTitanCN} --genomeBuild {params.genomeBuild} --outPlotFile {output} > {log} 2> {log}"
+
 
