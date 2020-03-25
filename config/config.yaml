@@ -7,13 +7,20 @@ tenX_funcs:  code/tenX_utils.R
 svaba_funcs:  code/svaba_utils.R
 plot_funcs:  code/plotting.R
 bxRescue_script:  code/barCodeOverlap.R
-combineSVCN_script:  code/combineSVABAandTITAN.R
+#combineSVCN_script:  code/combineSVABAandTITAN.R
+combineSVCN_script:  code/combineSVABA-GROCSVS-TITAN.R
 getLRsomaticSV_script:  code/getLongRangerSomaticSV.R
+buildPoN_script:  code/buildGermlineSVPoN.R
+filterPoNSV_script: code/filterPoNSVs.R
 plotSVCN_script:  code/plotTitanSvaba.R
+plotCircos_script: code/create_circosPlot.R
 
 ## path to TITAN snakemake root  ##
 titan_libdir:  /path/to/TitanCNA/
 titan_results:  /path/to/TitanCNA/snakemake_results/
+
+## path to GROCSVS results ##
+grocsvs_results: /path/to/GROCSVS/
 
 ## reference files ##
 refGenome:  /path/to/ref/genome.fasta
@@ -24,6 +31,12 @@ chrs:  c(1:22, \"X\")
 
 ## LongRanger params ##
 bamFileName:  phased_possorted_bam.bam
+#phaseVariantFileName:  phased_variants.vcf.gz
+
+## Panel of Normal settings ##
+PoN_blackListBinWidth: 1000
+PoN_minFreqSVbkpts: 2 # 53 * 0.05
+PoN_minFreqBlackList: 5 # 53 * 0.1
 
 ## SVABA settings ##
 svaba_dbSNPindelVCF:  /path/to/known/indels.vcf
@@ -40,8 +53,14 @@ plot_zoom:  FALSE
 plot_chrs:  c(1:22, \"X\") # "None" will also plot all chromosomes
 plot_startPos:  None
 plot_endPos:  None
-plot_geneFile:  data/AR_coord.txt ## include list of genes to annotate on plot
+plot_geneFile:  data/gene_list_72.txt ## include list of genes to annotate on plot
 plot_ylim:  c(-2,6)
 plot_size:  c(8,4)
 plot_type:  titan ## titan - will include haplotype fraction
 plot_format:  png
+
+## if users want to zoom in on a specific region, here is an example ##
+#plot_zoom:  TRUE
+#plot_chrs:  X
+#plot_startPos:  66000000
+#plot_endPos: 67000000
