@@ -373,7 +373,7 @@ setGenomeStyle <- function(x, genomeStyle = "NCBI", species = "Homo_sapiens"){
 ###########################################
 loadBPStoDataTableByChromosome <- function(bpsFile, tumor.id, chrs = c(1:22, "X"), 
     minLength = 1, dupSV.bpDiff = 1000){
-  sv <- fread(paste0("gunzip -c ", bpsFile))
+  sv <- fread(cmd=paste0("gunzip -c ", bpsFile))
   sv <- sv[chr1 %in% chrs & chr2 %in% chrs]
   ## filter vcf by span length ##
   #indSPAN <- sv[, span >= minLength | span == -1 | confidence == "PASS"]

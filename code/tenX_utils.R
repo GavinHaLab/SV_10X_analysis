@@ -433,7 +433,7 @@ getBXoverlap <- function(sv, bamfile, windowSize = 5000, minReadOverlapSupport =
     if (!is.null(reads[[1]]$tag$BX)){
       regionGR1 <- convertBamListToGRanges(reads[[1]])
       regionGR1.contained.pairs <- excludePartialMateMapping(regionGR1, region = regions[1], minMapQ = minMAPQ)
-      counts1[[i]] <- as.data.frame(table(regionGR1.contained.pairs$BX), stringsAsFactors=F)
+      counts1[[i]] <- as.data.frame(table(regionGR1.contained.pairs$tag.BX), stringsAsFactors=F)
     }else{
       counts1[[i]] <- data.frame(0)
     }
@@ -441,7 +441,7 @@ getBXoverlap <- function(sv, bamfile, windowSize = 5000, minReadOverlapSupport =
     if (!is.null(reads[[2]]$tag$BX)){
       regionGR2 <- convertBamListToGRanges(reads[[2]])
       regionGR2.contained.pairs <- excludePartialMateMapping(regionGR2, regions[2])
-      counts2[[i]] <- as.data.frame(table(regionGR2.contained.pairs$BX), stringsAsFactors=F)
+      counts2[[i]] <- as.data.frame(table(regionGR2.contained.pairs$tag.BX), stringsAsFactors=F)
     }else{
       counts2[[i]] <- data.frame(0)
     }

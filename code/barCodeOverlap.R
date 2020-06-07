@@ -57,6 +57,7 @@ outImage <- gsub("vcf", "RData", outFile)
 save.image(outImage)
 
 ## load vcf file ##
+message("Loading vcf file ", vcfFile)
 vcf <- readVcf(vcfFile, genome = build)
 
 ## filter vcf by span length ##
@@ -76,15 +77,21 @@ sv <- sv[!is.na(alt_1) & !is.na(alt_2) & !is.na(orient_1) & !is.na(orient_2)]
 setkey(sv, mateID)
 
 ## load bps.txt file ##
+message("Loading bps file ", bpsFile)
 bps <- loadBPStoDataTableByChromosome(bpsFile, tumor.id = id, chrs = chrs, 
     minLength = minLength, dupSV.bpDiff = 1000)
+# filter to keep only bxtags info column
+bps <- bps[, .(chromosome_1, start_1, chromosome_2, start_2, bxtags)]
+gc() ## garbage collect to clear memory
 bps[, mateID := 1:nrow(bps)]
 bps[bxtags == "x", bxtags := NA]
 
 
 ## annotate bxtags from bps to sv
+message("Annotating vcf by overlap...")
 overlap <- annotVCFbyOverlap(sv, bps, annotCol="bxtags", buffer = 0)
 sv[overlap$ind, bxtags := overlap$values]
+rm(overlap, bps); gc()
 
 ## set up Rsamtools scan bam params
 tags <- c("BX")
@@ -98,6 +105,7 @@ fields <- scanBamWhat()
 save.image(outImage)
 
 ## Get barcode overlap - main function call ## 
+message("Getting barcode overlap for ", nrow(sv), " sv events.")
 overlap.count <- getBXoverlap(sv, tumBamFile, minReadOverlapSupport = minReadOverlapSupport, windowSize = windowSize, flags = flags, fields = fields, tags = tags)
 save.image(outImage)
 
@@ -138,16 +146,20 @@ info(vcf)[mateID2, "BXOL.plus.Support"] <- overlap.count$OverlapCount.bxol.plus.
 info(vcf)[mateID2, "BXSupport"] <- overlap.count$Support.BXCount
 info(vcf)[mateID2, "BXTags"] <- sv[as.character(overlap.count$mateID), bxtags]
 
-sv <- getSVfromCollapsedVCF(vcf, genomeStyle = genomeStyle)
 save.image(outImage)
+message("Saved image")
 
 ## output to VCF file ##
 writeVcf(vcf, filename = outFile)
+message("Wrote  vcf to file")
 
 ## output sv object as a table ##
+sv <- getSVfromCollapsedVCF(vcf, genomeStyle = genomeStyle)
 outFileSV <- gsub("vcf", "txt", outFile)
-write.table(sv, file=outFileSV, col.names=T, row.names=F, quote=F, sep="\t")
+fwrite(sv, file=outFileSV, col.names=T, row.names=F, quote=F, sep="\t")
+message("Wrote table to file")
 
+message("Done")
 #mat <- as.data.frame(cbind(starts = starts[-1], counts = overlap.count[, 3]))
 #mat <- mat[!is.na(mat[, 2]), ]
 #gp <- ggplot(mat, aes(x=starts, y=counts)) + geom_point() + geom_line() +
