@@ -5,7 +5,7 @@
 #' date:	  February 24, 2020
 #' description: Overlap CNA boundaries to rescue filtered events. Includes SVABA, SVABA-BX-rescue, GROCSVS, Long Ranger SVs. Then, classify SV events.
 
-
+###set-up
 library(optparse)
 option_list <- list(
 	make_option(c("--tumID"), type = "character", help = "Tumor sample ID"),
@@ -72,20 +72,25 @@ if (!require(bsg, character.only=TRUE, quietly=TRUE, warn.conflicts=FALSE)) {
 }
 seqlevelsStyle(chrs) <- genomeStyle
 
-## get mean molecule length from LRsummaryFile
+
+#get mean molecule length from LRsummaryFile
 summary <- fread(LRsummaryFile)
 meanLength <- summary$molecule_length_mean
 n50LinkedReadPerMolecule <- summary$n50_linked_reads_per_molecule 
 
-svabaSupport <- c("PASS")
+#SV size filters
 maxBXOL <- Inf
+minSPAN <- 0
+minInvSPAN <- 0
+minLR.CNV.svLen <- 1e6
+minSPANBX <- meanLength * 1.50
+maxInvSPAN <- 5e6
+maxFBISPAN <- 30000 # used to determine BX counts - 99% quantile used
+minTrans <- Inf #SV size greater than this are considered translocations
+
+svabaSupport <- c("PASS")
 bxol.pval.cutoff <- 0.05
 loess.span <- 0.3
-minSPAN <- 10000
-minSPANBX <- meanLength * 1.50
-maxInvSPAN <- 1e6
-maxFBISPAN <- 30000 # used to determine BX counts - 99% quantile used
-minTrans <- Inf #1e7 #SV size greater than this are considered translocations
 numCores <- 6
 minBSDsupport <- 4
 minBXOL <- 2
@@ -95,7 +100,7 @@ filter.quantile <- 0.95
 pValThreshold = 1e-10
 absentBXOL = 1
 filterFlags <- c("PASS", "NOLONGFRAGS", "NEARBYSNVS", "NEARBYSNVS;NOLONGFRAGS")
-minOverlapFrac <- 0.5
+minOverlapFrac <- 0.75 # frac overlap of SV with CN during boundary overlap (getSegSVoverlap)
 cn.buffer <- 50000 ## for retrieving sv and cn boundary overlaps - not used
 minBXOL.frac.cn <- 0.02
 sv.cn.change.buffer <- 25000 # for determining prev and next cn segment status at SV
@@ -109,22 +114,12 @@ cn.buffer.lr.single <- 1e5 ## (getSegSVoverlap) for retrieving LR sv (single bkp
 cn.buffer.lr.both <- 1e6 ## (getSegSVoverlap) for retrieving LR sv (both bkpts) and cn boundary overlaps for del, gains, inv
 cn.invDup.buffer <- cn.buffer * 10 ## (getSegSVoverlap) for sv and cn boundaries overlaps for inverted dups
 sv.cn.change.buffer <- 25000 # for determining prev and next cn segment status at SV
-minOverlapFrac <- 0.75 # frac overlap of SV with CN during boundary overlap (getSegSVoverlap)
 maxDupLength <- 10e7
 minNumSeg.simpleSV <- 10
-minSPAN <- 10000
-minInvSPAN <- 1000
-maxInvSPAN <- 5e6
-maxFBISPAN <- 30000 # used to determine BX counts - 99% quantile used
 minFBIcn <- 4
-minLR.CNV.svLen <- 1e6
 
 save.image(outImage)
 
-## load sample list
-# rownames = tumor id, column.1=V5 = normal id
-#samples <- read.delim(sampleFile, header=F, row.names=1, as.is=T)[,c(4),drop=F]
-#colnames(samples) <- c("Tumor", "Normal")
 
 ######################################
 ############# LOAD SVABA #############
@@ -132,11 +127,6 @@ save.image(outImage)
 message("Loading svaba results: ", svabaVCF)
 svaba <- loadVCFtoDataTableByChromosome(svabaVCF, chr=chrs, genomeStyle=genomeStyle, minSPAN=minSPAN, minSPANBX=minSPANBX, minBXOL=minBXOL, maxBXOL=maxBXOL, minBSDsupport=minBSDsupport, dupSV.bpDiff=dupSV.bpDiff)
 svaba <- cbind(Sample = tumId, SV.id = 1:nrow(svaba), svaba)
-## TEMPORARY FIX BECAUSE BXOL IS A UNIQUE OF PROPER PAIRS AND SUPPORT BUT WE WANT ONLY PROPER PAIRS
-#svaba[, BXOL := min(0, BXOL - BXSupport)]
-## exclude SR/DR since other tools may be inconsistent in how they are called
-#svaba[, BXOL := BXOL - BXSupport]; svaba[, BXC.1 := BXC.1 - BXSupport]; svaba[, BXC.2 := BXC.2 - BXSupport]
-## fit BXOL by length from SNOWMAN SV ##
 fitResults <- computeBXOLbinomialTest(svaba, minBXOL=minBXOL, minSPAN=minSPAN, minSPANBX=minSPANBX,
 		se.level=se.level, loess.span=loess.span, filter.quantile=filter.quantile)
 svaba <- copy(fitResults$sv)
@@ -152,9 +142,7 @@ maxfoldBackInvBXCount <- svaba[SPAN > 0 & SPAN < maxFBISPAN & orient_1==orient_2
 										max(quantile(BXC.1, 0.95, na.rm=T), quantile(BXC.2, 0.95, na.rm=T))]
 maxfoldBackInvAD <- svaba[SPAN > 0 & SPAN < maxFBISPAN & orient_1==orient_2, quantile(AD, 0.95)]
 indFBI <- svaba[support=="SVABA" & 
-			#(SPAN > 0 & SPAN < maxFBISPAN & orient_1 != orient_2 & BXOL >= minBXOL) | #not inversions
 			(SPAN > 0 & SPAN < maxFBISPAN & orient_1 == orient_2), #& #fold-back inv
-			 #BXC.1 > maxfoldBackInvBXCount & BXC.2 > maxfoldBackInvBXCount)),# & AD > maxfoldBackInvAD)),
 			which=TRUE]
 # use minSPAN or maxFBISPAN
 indSVABA <- svaba[support=="SVABA" & ((SPAN >= minSPAN ) | SPAN == -1), which=TRUE]
@@ -171,7 +159,7 @@ sv.seg.interChr <- getSegSVoverlap(segs, svaba, event.cn=unique(segs$Corrected_C
 # PASS SV first, then remove CN seg from consideration
 sv.seg.interChr <- sv.seg.interChr[!SEG.id %in% sv.seg.interChr[support == "SVABA", unique(SEG.id)]]
 ####### intra-chr ###########
-# only a one bkpt needs to be within CN boundary but must statisfy BX fraction overlap
+# only one bkpt needs to be within CN boundary but must satisfy BX fraction overlap
 sv.seg.frac <- sv.seg[BXOL >= minBXOL, .(.I, pmin(BX.frac.1,BX.frac.2)), by=SEG.id]
 sv.seg.frac.ind <- sv.seg.frac[sv.seg.frac[V2 > minBXOL.frac.cn, .I[which.max(V2)], by=SEG.id]$V1, I]
 indCN <- sv.seg[sv.seg.frac.ind, SV.id]
@@ -296,6 +284,7 @@ hits.lr.groc.2 <- findOverlaps(query=lr.2, subject=groc.2)
 
 #svaba + groc #
 svaba.groc.ind <- rbind(data.frame(hits.svaba.groc.1), data.frame(hits.svaba.groc.2))
+#hits will be duplicates if both first and second breakpoints overlap between the two call sets
 svaba.groc.ind <- svaba.groc.ind[duplicated(svaba.groc.ind), ]
 svaba[svaba.groc.ind$queryHits, overlap.GROCSVS.id := groc[svaba.groc.ind$subjectHits, SV.id]]
 groc[svaba.groc.ind$subjectHits, overlap.SVABA.id := svaba[svaba.groc.ind$queryHits, SV.id]]
@@ -414,9 +403,9 @@ segs[, TDflankInd := getTDcnFlank(segs, maxDupLength = maxDupLength)]
 
 save.image(outImage)
 
-## events seen in 2 or more tools
-#consensus.sv.id <- sv[which(rowSums(!is.na(sv[, .(overlap.SVABA.id, overlap.GROCSVS.id, overlap.LONGRANGER.id)])) >=2), SV.combined.id]
-consensus.sv.id <- sv[, SV.combined.id]
+## events seen in 2 or more tools ###changed back
+consensus.sv.id <- sv[which(rowSums(!is.na(sv[, .(overlap.SVABA.id, overlap.GROCSVS.id, overlap.LONGRANGER.id)])) >=2), SV.combined.id]
+#consensus.sv.id <- sv[, SV.combined.id]
 
 ########################################################################
 ## interchromosomal translocations - balanced vs unbalanced ##
@@ -436,7 +425,8 @@ if (nrow(interchrUBal.cn.sv) > 0){
 			(Copy_Number_1_prev == Copy_Number_1_next) & (Copy_Number_2_prev == Copy_Number_2_next)]
 	interchrBAL.sv.id <- sort(interchrBAL.cn.sv$SV.combined.id)
 	sv[SV.combined.id %in% interchrBAL.sv.id, CN_overlap_type := "Trans-Bal"]
-	# exclude BX rescue for interchr if not seen by another tool
+	###
+    # exclude BX rescue for interchr if not seen by another tool
 	sv[type == "InterChr" & !SV.combined.id %in% consensus.sv.id & (support == "BX"), CN_overlap_type := NA] 
 }
 
@@ -641,5 +631,3 @@ write.table(segs, file=outputCNFile, col.names=T, row.names=F, quote=F, sep="\t"
 ## output bedpe files ##
 ########################################################################
 writeBedpeToFile(sv, file=outputBedpeFile)
-
-
