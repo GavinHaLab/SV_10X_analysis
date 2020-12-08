@@ -81,7 +81,8 @@ n50LinkedReadPerMolecule <- summary$n50_linked_reads_per_molecule
 #SV size filters
 maxBXOL <- Inf
 minSPAN <- 0
-minInvSPAN <- 0
+minInvSPAN <- 1000
+minColSPAN <- 10000
 minLR.CNV.svLen <- 1e6
 minSPANBX <- meanLength * 1.50
 maxInvSPAN <- 5e6
@@ -318,7 +319,7 @@ bothSV <- rbind(cbind(Tool="SVABA", svaba[, keepColNames, with=F]),
 							  cbind(Tool="LONGRANGER", lr[, keepColNames[-c(7,8)], with=F]), fill=T)
 bothSV[overlap.GROCSVS.id %in% groc.clust$SV.id, GROCSVS.cluster := groc.clust[as.character(overlap.GROCSVS.id), 2]]
 bothSV <- cbind(SV.combined.id = 1:nrow(bothSV), bothSV, Mean.Molecule.Length = meanLength)
-bothSV[, type := getSVType(bothSV, minColSPAN = minSPAN, minTrans = minTrans)]#, maxInvSPAN = maxInvSPAN, maxFBISPAN = maxFBISPAN)]
+bothSV[, type := getSVType(bothSV, minColSPAN = minColSPAN, minTrans = minTrans)]#, maxInvSPAN = maxInvSPAN, maxFBISPAN = maxFBISPAN)]
 #bothSV[, CN_overlap_type := "Complex"]
 
 ## get uniq events - shorten the SV list ##
@@ -379,7 +380,7 @@ annot <- annotateSVbetweenBkptsWithCN(sv, cn, segs, buffer = seg.buffer,
 sv[annot$ind, Copy_Number_1_2_mean := round(annot$annot.cn$cn)]
 sv[annot$ind, Copy_Number_1_2_numSegs := annot$annot.seg$NumSeg]
 
-sv[, type := getSVType(sv, minColSPAN = minSPAN, minTrans = minTrans)]
+sv[, type := getSVType(sv, minColSPAN = minColSPAN, minTrans = minTrans)]
 save.image(outImage)
 
 ########################################################################
@@ -571,12 +572,13 @@ sv[is.na(CN_overlap_type) & SPAN > 0 & SPAN <= minInvSPAN & grepl("CN", support)
 # inter-chromosomal SVs - with CN boundary overlap support
 #sv[is.na(CN_overlap_type) & !is.na(type) & SPAN == -1 & grepl("CN", support), CN_overlap_type := "Unknown-TransWithCN"]
 
+#the next block is currently retired--we keep all events regardless of is.na(CN_overlap_type)
 ########################################################################
 ## filter short inversions and deletions (longranger & svaba) ##
 ########################################################################
-message("Filtering events with no class - usually short inversions, deletions, telomere/centromere SVs")
+#message("Filtering events with no class - usually short inversions, deletions, telomere/centromere SVs")
 #sv <- sv[!is.na(CN_overlap_type) | !is.na(overlap.GROCSVS.id)]
-sv <- sv[!is.na(CN_overlap_type)]
+#sv <- sv[!is.na(CN_overlap_type)]
 
 ########################################################################
 ## filter events with coordinate of 0 (longranger & svaba) ##
