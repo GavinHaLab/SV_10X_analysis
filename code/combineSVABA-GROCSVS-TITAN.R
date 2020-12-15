@@ -82,7 +82,7 @@ n50LinkedReadPerMolecule <- summary$n50_linked_reads_per_molecule
 maxBXOL <- Inf
 minSPAN <- 0
 minInvSPAN <- 1000
-minColSPAN <- 10000
+minColSPAN <- 1000
 minLR.CNV.svLen <- 1e6
 minSPANBX <- meanLength * 1.50
 maxInvSPAN <- 5e6
