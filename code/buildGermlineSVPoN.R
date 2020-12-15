@@ -53,9 +53,8 @@ if (!require(bsg, character.only=TRUE, quietly=TRUE, warn.conflicts=FALSE)) {
 seqinfo <- seqinfo[chrs]
 
 buffer <- 100
-minDelLength <- 1000
 minQual <- 20
-minSVABA.span <- 1000
+minSVABA.span <- 0
 
 save.image(outImage)
 
@@ -85,7 +84,7 @@ sv.LR <- unique(sv.LR)
 
 sv.LR[, Tool := "LONGRANGER"]
 sv.SVABA[, Tool := "SVABA"]
-sv <- rbind(sv.LR, sv.SVABA[SPAN >= minSVABA.span & SPAN == -1], fill=TRUE)
+sv <- rbind(sv.LR, sv.SVABA[SPAN >= minSVABA.span | SPAN == -1], fill=TRUE)
 sv[Tool == "SVABA", SOURCE := "SVABA"]
 cols <- c("Sample", "chromosome_1", "start_1", "chromosome_2", "start_2")
 cols.all <- c("Sample", "chromosome_1", "start_1", "chromosome_2", "start_2", "mateID", "FILTER", "Tool", "SOURCE", "DR", "SR", "AD", "PS", "SPAN", "orient_1", "orient_2")
