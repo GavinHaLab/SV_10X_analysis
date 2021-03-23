@@ -15,21 +15,23 @@ option_list <- list(
 	make_option(c("--blackListFile"), type="character", help="Path to SV blacklist regions file."),
 	make_option(c("--minFreqPoNSVBkptOverlap"), type="numeric", default=2, help="Minimum frequency of overlapping breakpoint across PoN cohort to consider for filtering out of results. Default [%default]"),
 	make_option(c("--minFreqPoNBlackList"), type="numeric", default=5, help="Minimum frequency across PoN cohort to include blacklist region for filtering out of results. Default [%default]"),
-	make_option(c("--outputSVAnnotFile"), type="character", help="Path to output SV file with PoN annotations."),
-	make_option(c("--outputSVFiltFile"), type="character", help="Path to output SV file after filtering."),
-	make_option(c("--outputSummary"), type="character", help="Path to output summary file.")
+	make_option(c("--outputSVAnnotFile"), type="character", help="Path to output SV file with PoN annotations.")
+	#make_option(c("--outputSVFiltFile"), type="character", help="Path to output SV file after filtering."),
+	#make_option(c("--outputSummary"), type="character", help="Path to output summary file.")
 	)
 
 parseobj <- OptionParser(option_list=option_list, usage = "usage: Rscript %prog [options]")
 opt <- parse_args(parseobj)
 print(opt)
 
+library(data.table)
+library(GenomicRanges)
+library(VariantAnnotation)
+library(stringr)
+
 source(opt$svaba_funcs)
 
-library(VariantAnnotation)
-library(GenomicRanges)
-library(data.table)
-library(stringr)
+setDTthreads(1)
 args <- commandArgs(TRUE)
 options(stringsAsFactors=FALSE, width=160, scipen=999)
 
@@ -44,10 +46,10 @@ genomeStyle <- opt$genomeStyle
 minFreqPoNSVBkptOverlap <- opt$minFreqPoNSVBkptOverlap
 minFreqPoNBlackList <- opt$minFreqPoNBlackList
 outputSVAnnotFile <- opt$outputSVAnnotFile
-outputSVFiltFile <- opt$outputSVFiltFile
-outSummary <- opt$outputSummary
+#outputSVFiltFile <- opt$outputSVFiltFile
+#outSummary <- opt$outputSummary
 
-outImage <- paste0(outputSVFiltFile,".RData")
+outImage <- paste0(outputSVAnnotFile,".RData")
 save.image(outImage)
 
 ############################################################
@@ -72,9 +74,9 @@ pon[, end := start]
 hits1 <- findOverlaps(query = sv.1.gr, subject = as(pon, "GRanges"))
 hits2 <- findOverlaps(query = sv.2.gr, subject = as(pon, "GRanges"))
 sv.1[, SV.PoN.count := as.integer(0)]
-sv.1[queryHits(hits1), SV.PoN.count := pon[subjectHits(hits1), count]]
+sv.1[queryHits(hits1), SV.PoN.sampleCount := pon[subjectHits(hits1), sampleCount]]
 sv.2[, SV.PoN.count := as.integer(0)]
-sv.2[queryHits(hits2), SV.PoN.count := pon[subjectHits(hits2), count]]
+sv.2[queryHits(hits2), SV.PoN.sampleCount := pon[subjectHits(hits2), sampleCount]]
 
 ## find number of SVs in blacklist regions ##
 hits1 <- findOverlaps(query = sv.1.gr, as(blist, "GRanges"))
@@ -89,8 +91,8 @@ sv.2[, SV.blacklist.SVcount := as.integer(0)]
 sv.2[queryHits(hits2), SV.blacklist.SVcount := blist[subjectHits(hits2), SVbkptCounts]]
 #tile.dt.bl <- merge(x=tile.dt, y=blist, by=c("seqnames", "start", "end", "width", "strand"), suffixes = c("", ".blacklist"))
 
-sv[, SV.PoN.count_1 := sv.1$SV.PoN.count]
-sv[, SV.PoN.count_2 := sv.2$SV.PoN.count]
+sv[, SV.PoN.sampleCount_1 := sv.1$SV.PoN.sampleCount]
+sv[, SV.PoN.sampleCount_2 := sv.2$SV.PoN.sampleCount]
 sv[, SV.blacklist.sampleCount_1 := sv.1$SV.blacklist.sampleCount]
 sv[, SV.blacklist.sampleCount_2 := sv.2$SV.blacklist.sampleCount]
 sv[, SV.blacklist.SVcount_1 := sv.1$SV.blacklist.SVcount]
@@ -99,6 +101,9 @@ sv[, SV.blacklist.SVcount_2 := sv.2$SV.blacklist.SVcount]
 #fwrite(sv, file = outputSVFile, col.names=TRUE, row.names=FALSE, quote=FALSE, sep="\t")
 writeBedpeToFile(sv, file=outputSVAnnotFile)
 
+# # save image
+save.image(outImage)
+
 ###########################################################
 ######## FILTER SV BASED ON PON AND BLACK LIST ############
 ###########################################################
@@ -106,29 +111,30 @@ writeBedpeToFile(sv, file=outputSVAnnotFile)
 # minNumPoNSV <- ceiling(numSamples * minFreqPoNSVBkptOverlap)
 # minNumPoNBlackList <- ceiling(numSamples * minFreqPoNBlackList)
 
-sv.filt <- sv[!(start_1 == 0 | start_2 == 0)]
+# sv.filt <- sv[!(start_1 == 0 | start_2 == 0)]
 
-germSV.ind <- sv.filt[SV.PoN.count_1 >= minFreqPoNSVBkptOverlap | SV.PoN.count_2 >= minFreqPoNSVBkptOverlap | 
-	SV.blacklist.sampleCount_1 >= minFreqPoNBlackList | SV.blacklist.sampleCount_2 >= minFreqPoNBlackList,
-	which = TRUE]
+# germSV.ind <- sv.filt[(SV.PoN.sampleCount_1 >= minFreqPoNSVBkptOverlap | 
+# 						SV.PoN.sampleCount_2 >= minFreqPoNSVBkptOverlap) | 
+# 					  (SV.blacklist.sampleCount_1 >= minFreqPoNBlackList | 
+# 						SV.blacklist.sampleCount_2 >= minFreqPoNBlackList),
+# 	which = TRUE]
 
-## output filtered SV table to tsv file ##
-#fwrite(sv.filt[-germSV.ind, ], file=outputSVFiltFile, col.names=T, row.names=F, quote=F, sep="\t")
-## output filtered SV table to bedpe file ##
-if (length(germSV.ind) > 0){
-	sv.filt <- sv.filt[-germSV.ind, ]
-}
-writeBedpeToFile(sv.filt, file=outputSVFiltFile)
+# ## output filtered SV table to tsv file ##
+# #fwrite(sv.filt[-germSV.ind, ], file=outputSVFiltFile, col.names=T, row.names=F, quote=F, sep="\t")
+# ## output filtered SV table to bedpe file ##
+# if (length(germSV.ind) > 0){
+# 	sv.filt <- sv.filt[-germSV.ind, ]
+# }
+# writeBedpeToFile(sv.filt, file=outputSVFiltFile)
 
-## collect summary counts ##
-germSV.tool.counts <- sv.filt[germSV.ind, table(Sample, Tool)]
-germSV.support.counts <- sv.filt[germSV.ind, table(Sample, support)]
-germSV.type.counts <- sv.filt[germSV.ind, table(Sample, CN_overlap_type)]
-germSV.filter.counts <- sv.filt[germSV.ind, table(Sample, FILTER)]
-summTab <- data.table(cbind(Sample=rownames(germSV.tool.counts), germSV.tool.counts, germSV.support.counts, germSV.type.counts, germSV.filter.counts))
+# ## collect summary counts ##
+# germSV.tool.counts <- sv.filt[germSV.ind, table(Sample, Tool)]
+# germSV.support.counts <- sv.filt[germSV.ind, table(Sample, support)]
+# germSV.type.counts <- sv.filt[germSV.ind, table(Sample, CN_overlap_type)]
+# germSV.filter.counts <- sv.filt[germSV.ind, table(Sample, FILTER)]
+# summTab <- data.table(cbind(Sample=rownames(germSV.tool.counts), germSV.tool.counts, germSV.support.counts, germSV.type.counts, germSV.filter.counts))
 
-## output summary counts to file ##
-fwrite(summTab, file=outSummary, col.names=T, row.names=F, quote=F, sep="\t")
+# ## output summary counts to file ##
+# fwrite(summTab, file=outSummary, col.names=T, row.names=F, quote=F, sep="\t")
 
-# save image
-save.image(outImage)
+

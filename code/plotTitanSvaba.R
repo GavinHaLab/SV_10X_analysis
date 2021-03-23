@@ -51,7 +51,7 @@ library(tools)
 library(SNPchip)
 library(VariantAnnotation)
 library(BSgenome.Hsapiens.UCSC.hg38)
-
+setDTthreads(1)
 source(paste0(opt$titan_libdir, "/R/haplotype.R"))
 #source(opt$tenX_funcs)
 source(opt$svaba_funcs)
@@ -97,7 +97,7 @@ svabaCol <- "black"
 rescueCol <- "purple"
 lrCol <- "lightgrey"
 grocCol <- "blue"
-manualCol <- "blue"
+manualCol <- "purple"
 #seqinfo <- Seqinfo(genome=genomeBuild)
 bsg <- paste0("BSgenome.Hsapiens.UCSC.", genomeBuild)
 if (!require(bsg, character.only=TRUE, quietly=TRUE, warn.conflicts=FALSE)) {
@@ -149,10 +149,7 @@ if (!cnColor){
 }
 
 if (!is.null(altSVFile) && altSVFile != "None"){
-	altSV <- read.delim(altSVFile, header=F, as.is=T)
-	colnames(altSV)[c(1,2,3,4,5,6,12,13,22)] <- c("Sample", "SV.id", 
-		"chromosome_1", "start_1", "chromosome_2", "start_2", "orient_1", "orient_2", "SPAN")
-	altSV <- as.data.table(altSV)
+	altSV <- fread(altSVFile, na.string = ".")
 }
 
 if (!is.null(geneList) && geneList != "None"){
@@ -213,7 +210,10 @@ if (exclude.na.snp){
 }
 
 ############# load Combined SV (SVABA, GROC, LongRanger) ##############
-sv <- fread(svFile)
+sv <- fread(svFile, na.string = ".")
+# filter very short SVABA calls with no CN_overlap_type or short SVABA calls with CN overlap
+sv <- sv[SV.Filter == "KEEP"]
+#sv <- sv[CN_overlap_type != "." & CN_overlap_type != "Unknown-ShortSVwithCN"]
 #save.image(file=outImage)
 
 #####################################
@@ -248,8 +248,11 @@ for (j in 1:length(chrStr)){
   }else{
   	pdf(outPlotFile, width = width, height=height)
 	}
-  if (plotHaplotypeFrac){ par(mfrow=c(2,1)); spacing <- 0  }
-	
+  if (plotHaplotypeFrac){ 
+    par(mfrow=c(2,1)); spacing <- 0  
+  }else{
+    spacing <- 6
+  }	
   if (plotSegs) { segsToPlot <- segs } else { segsToPlot <- NULL}
   
   if (grepl("X", chrStr[j])) { cnCol <- rep("#000000", 30) }
@@ -278,7 +281,7 @@ for (j in 1:length(chrStr)){
 			plotRearrangementArcs(altSV.sample, cn=as.data.frame(ulp), chr=chrStr[j], 
 										interchr = interchr, plotAtCentre = plotAtCentre,
 										xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
-										centreLine=centreLine, buffer=buffer, lcol=manualCol, arr.col=rescueCol, 
+										centreLine=centreLine, buffer=buffer, lcol=manualCol, arr.col=manualCol, 
 										endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
   	}	
 
@@ -286,17 +289,17 @@ for (j in 1:length(chrStr)){
     message("Plotting longranger")
     plotRearrangementArcs(sv[Tool=="LONGRANGER"], cn=as.data.frame(ulp), chr=chrStr[j], 
                   interchr = interchr, plotAtCentre = plotAtCentre,
-                  xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1,
+                  xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
                   centreLine=centreLine, buffer=buffer, lcol=lrCol, arr.col=lrCol, 
                   endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
     ## plot BX Rescue arcs ##
     message("Plotting CN rescue")
-    plotRearrangementArcs(sv[Tool=="SVABA" & support %in% c("BX,CN1","BX,CN2","SVABA,CN1","SVABA,CN2") &
+    plotRearrangementArcs(sv[Tool=="SVABA" & support %in% c("RESCUE,CN2","RESCUE,CN2") &
                           CN_overlap_type != "Unknown-ShortSVwithCN"], 
     							cn=as.data.frame(ulp), 
     							chr=chrStr[j], interchr = interchr, plotAtCentre = plotAtCentre,
                   xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
-                  centreLine=centreLine, buffer=buffer, lcol=svabaCol, arr.col=svabaCol, 
+                  centreLine=centreLine, buffer=buffer, lcol=rescueCol, arr.col=rescueCol, 
                   endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
     # message("Plotting CN rescue - short SVs")
     # plotRearrangementArcs(sv[Tool=="SVABA" & support %in% c("BX,CN1","BX,CN2","SVABA,CN1","SVABA,CN2") &
@@ -307,15 +310,22 @@ for (j in 1:length(chrStr)){
     #               centreLine=centreLine, buffer=buffer, lcol=rescueCol, arr.col=rescueCol, 
     #               endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
     message("Plotting BX rescue")
-    plotRearrangementArcs(sv[Tool=="SVABA" & (support %in% c("BX"))], 
+    plotRearrangementArcs(sv[Tool=="SVABA" & (support %in% c("BX,CN1","BX,CN2","BX"))], 
     							cn=as.data.frame(ulp), 
     							chr=chrStr[j], interchr = interchr, plotAtCentre = plotAtCentre,
                   xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
                   centreLine=centreLine, buffer=buffer, lcol=rescueCol, arr.col=rescueCol, 
                   endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
+    message("Plotting manual SVs")
+    plotRearrangementArcs(sv[Tool=="SVABA" & (support %in% c("MANUAL","MANUAL,CN1","MANUAL,CN2"))], 
+                  cn=as.data.frame(ulp), 
+                  chr=chrStr[j], interchr = interchr, plotAtCentre = plotAtCentre,
+                  xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
+                  centreLine=centreLine, buffer=buffer, lcol=manualCol, arr.col=manualCol, 
+                  endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
     ## plot SVABA arcs ##
     message("Plotting svaba")
-    plotRearrangementArcs(sv[Tool=="SVABA" & support=="SVABA"], cn=as.data.frame(ulp), 
+    plotRearrangementArcs(sv[Tool=="SVABA" & support %in% c("SVABA","SVABA,CN1","SVABA,CN2")], cn=as.data.frame(ulp), 
     							chr=chrStr[j], interchr = interchr, plotAtCentre = plotAtCentre,
                   xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
                   centreLine=centreLine, buffer=buffer, lcol=svabaCol, arr.col=svabaCol, 

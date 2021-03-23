@@ -16,7 +16,7 @@ rule all:
 		
 rule plotSVABAandTITAN:
 	input:
-		svabaVCF=config["combined_SV_CNA_results"] + "{tumor}/{tumor}.svabaTitan.sv.PoNfilter.bedpe",
+		svabaVCF=config["combined_SV_CNA_results"] + "{tumor}/{tumor}.svabaTitan.sv.PoNToolFilter.bedpe",
 		titanBinFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".titan.ichor.cna.txt"),
 		titanSegFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".titan.ichor.seg.noSNPs.txt"),
 		titanParamFile=lambda wildcards: getTITANpath(config["titan_results"], wildcards.tumor, ".params.txt")
@@ -28,6 +28,7 @@ rule plotSVABAandTITAN:
 		svabafuncs=config["svaba_funcs"],
 		plotfuncs=config["plot_funcs"],
 		libdir=config["titan_libdir"],
+		manualSVfile=config["manualSVFile"],
 		genomeBuild=config["genomeBuild"],
 		genomeStyle=config["genomeStyle"],
 		cytobandFile=config["cytobandFile"],
@@ -43,6 +44,6 @@ rule plotSVABAandTITAN:
 	log:
 		"logs/plotSVABAandTITAN_zoom/{plotID}/{tumor}_CNA-SV_{type}_chr{chr}-{start}-{end}.{format}.log"
 	shell:
-		"Rscript {params.plotSVCNscript} --id {wildcards.tumor} --tenX_funcs {params.tenXfuncs} --svaba_funcs {params.svabafuncs} --plot_funcs {params.plotfuncs} --titan_libdir {params.libdir} --svFile {input.svabaVCF} --titanBinFile {input.titanBinFile} --titanSegFile {input.titanSegFile} --titanParamFile {input.titanParamFile} --chrs \"{params.chr}\" --genomeBuild {params.genomeBuild} --genomeStyle {params.genomeStyle} --cytobandFile {params.cytobandFile} --start {params.start} --end {params.end} --zoom {params.zoom} --plotYlim \"{params.ylim}\" --geneFile {params.geneFile} --plotCNAtype {params.type} --plotSize \"{params.size}\" --outPlotFile {output} > {log} 2> {log}" 
+		"Rscript {params.plotSVCNscript} --id {wildcards.tumor} --tenX_funcs {params.tenXfuncs} --svaba_funcs {params.svabafuncs} --plot_funcs {params.plotfuncs} --titan_libdir {params.libdir} --svFile {input.svabaVCF} --customSVFile {params.manualSVfile} --titanBinFile {input.titanBinFile} --titanSegFile {input.titanSegFile} --titanParamFile {input.titanParamFile} --chrs \"{params.chr}\" --genomeBuild {params.genomeBuild} --genomeStyle {params.genomeStyle} --cytobandFile {params.cytobandFile} --start {params.start} --end {params.end} --zoom {params.zoom} --plotYlim \"{params.ylim}\" --geneFile {params.geneFile} --plotCNAtype {params.type} --plotSize \"{params.size}\" --outPlotFile {output} > {log} 2> {log}" 
 	
 

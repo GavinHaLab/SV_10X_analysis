@@ -18,6 +18,7 @@ option_list <- list(
 	make_option(c("--LRsvFile"), type="character", help = "Path to Long Ranger SV call files."),
 	make_option(c("--LRsummaryFile"), type="character", help = "Path to Long Ranger summary.csv file."),
 	make_option(c("--grocsvsFile"), type="character", help="Path to GROCSVS output PostprocessingStep/svs.vcf file."),
+	 make_option(c("--manualSVFile"), type="character", default=NULL, help = "Path to additional SV events (not in --svFile) that were manually curated."),
 	make_option(c("--genomeBuild"), type="character", default="hg19", help = "Genome build: hg19 or hg38. Default [%default]"),
 	make_option(c("--genomeStyle"), type = "character", default = "NCBI", help = "NCBI or UCSC chromosome naming convention; use UCSC if desired output is to have \"chr\" string. [Default: %default]"),
 	make_option(c("--chrs"), type = "character", default = "c(1:22, 'X')", help = "Chromosomes to analyze; string [Default: %default"),
@@ -34,12 +35,12 @@ library(stringr)
 library(ggplot2)
 library(plyr)
 
-options(stringsAsFactors=F, width=165, scipen=999)
+options(stringsAsFactors=F, width=165, scipen=10)
 
 parseobj <- OptionParser(option_list=option_list, usage = "usage: Rscript %prog [options]")
 opt <- parse_args(parseobj)
 print(opt)
-
+setDTthreads(4)
 # source utils.R files
 source(opt$svaba_funcs)
 source(opt$tenX_funcs)
@@ -52,6 +53,7 @@ segFile <- opt$titanSegFile
 LRsummaryFile <- opt$LRsummaryFile
 LRsvFile <- opt$LRsvFile
 grocsvsFile <- opt$grocsvsFile 
+manualSVFile <- opt$manualSVFile
 outputSVFile <- opt$outputSVFile
 outputCNFile <- opt$outputCNFile
 outputBedpeFile <- opt$outputBedpeFile
@@ -80,10 +82,10 @@ n50LinkedReadPerMolecule <- summary$n50_linked_reads_per_molecule
 
 #SV size filters
 maxBXOL <- Inf
-minSPAN <- 0
+minSPAN <- 0 
 minInvSPAN <- 1000
 minColSPAN <- 1000
-minLR.CNV.svLen <- 1e6
+minLR.CNV.svLen <- 1e5
 minSPANBX <- meanLength * 1.50
 maxInvSPAN <- 5e6
 maxFBISPAN <- 30000 # used to determine BX counts - 99% quantile used
@@ -102,6 +104,7 @@ pValThreshold = 1e-10
 absentBXOL = 1
 filterFlags <- c("PASS", "NOLONGFRAGS", "NEARBYSNVS", "NEARBYSNVS;NOLONGFRAGS")
 minOverlapFrac <- 0.75 # frac overlap of SV with CN during boundary overlap (getSegSVoverlap)
+minSVCNoverlapSPAN <- 50000 
 cn.buffer <- 50000 ## for retrieving sv and cn boundary overlaps - not used
 minBXOL.frac.cn <- 0.02
 sv.cn.change.buffer <- 25000 # for determining prev and next cn segment status at SV
@@ -112,9 +115,10 @@ seg.buffer <- 150000 ## (annotateSVbetweenBkptsWithCN) for determine seg boundar
 cn.buffer.both <- 1e6 ## (getSegSVoverlap) for retrieving svaba sv (both bkpts) and cn boundary overlaps for del, gains, inv
 cn.buffer.single <- 1e5 ## (getSegSVoverlap) for retrieving svaba sv (single bkpt) and cn boundary overlaps for del, gains, inv
 cn.buffer.lr.single <- 1e5 ## (getSegSVoverlap) for retrieving LR sv (single bkpt) and cn boundary overlaps for del, gains, inv
-cn.buffer.lr.both <- 1e6 ## (getSegSVoverlap) for retrieving LR sv (both bkpts) and cn boundary overlaps for del, gains, inv
+cn.buffer.both.noBXreq <- 1e5 ## (getSegSVoverlap) for retrieving LR sv (single bkpt) and cn boundary overlaps for del, gains, inv - use for SVs with no BX support
+cn.buffer.lr.both <- 5e5 ## (getSegSVoverlap) for retrieving LR sv (both bkpts) and cn boundary overlaps for del, gains, inv
+minSVCNoverlapFrac <- 0.75 ## fraction of SV overlap with CN event (based on both bkpts overlapping CN boundaries)
 cn.invDup.buffer <- cn.buffer * 10 ## (getSegSVoverlap) for sv and cn boundaries overlaps for inverted dups
-sv.cn.change.buffer <- 25000 # for determining prev and next cn segment status at SV
 maxDupLength <- 10e7
 minNumSeg.simpleSV <- 10
 minFBIcn <- 4
@@ -126,8 +130,32 @@ save.image(outImage)
 ############# LOAD SVABA #############
 ######################################
 message("Loading svaba results: ", svabaVCF)
-svaba <- loadVCFtoDataTableByChromosome(svabaVCF, chr=chrs, genomeStyle=genomeStyle, minSPAN=minSPAN, minSPANBX=minSPANBX, minBXOL=minBXOL, maxBXOL=maxBXOL, minBSDsupport=minBSDsupport, dupSV.bpDiff=dupSV.bpDiff)
-svaba <- cbind(Sample = tumId, SV.id = 1:nrow(svaba), svaba)
+svaba <- loadVCFtoDataTableByChromosome(svabaVCF, chr=chrs, genomeStyle=genomeStyle, minSPAN=minSPAN, minSPANBX=minSPANBX, minBXOL=0, maxBXOL=Inf, minBSDsupport=minBSDsupport, dupSV.bpDiff=dupSV.bpDiff)
+svaba <- cbind(Sample = tumId, svaba)
+
+#######################################################
+############# LOAD SVABA MANUAL CURATED SV ############
+#######################################################
+# include manually curated SVs to the list
+if (!is.na(manualSVFile) | manualSVFile != "None"){
+	message("Loading manual SV file: ", manualSVFile)
+	manualSvaba <- fread(manualSVFile)
+	manualSvaba <- manualSvaba[Sample == tumId]
+	manualSvaba[, support := "MANUAL"]
+	svaba <- rbind(svaba, manualSvaba, fill = TRUE)
+	svaba <- svaba[order(chromosome_1, start_1)]
+	indManual <- svaba[support == "MANUAL", which = TRUE]
+}
+
+#######################################################
+############# SVABA BARCODE RESCUE ############
+#######################################################
+# add sample ID and SV.id 
+# SV.id will be used later when overlapping with other tools
+svaba <- cbind(SV.id = 1:nrow(svaba), svaba)
+
+message("Processing svaba barcode rescue: ", svabaVCF)
+# compute binomial test for barcode overlap and rescue
 fitResults <- computeBXOLbinomialTest(svaba, minBXOL=minBXOL, minSPAN=minSPAN, minSPANBX=minSPANBX,
 		se.level=se.level, loess.span=loess.span, filter.quantile=filter.quantile)
 svaba <- copy(fitResults$sv)
@@ -147,7 +175,9 @@ indFBI <- svaba[support=="SVABA" &
 			which=TRUE]
 # use minSPAN or maxFBISPAN
 indSVABA <- svaba[support=="SVABA" & ((SPAN >= minSPAN ) | SPAN == -1), which=TRUE]
+
 save.image(outImage)
+
 
 ###########################################
 ###  COPY NUMBER RESCUE OF SVABA EVENTS ###
@@ -155,19 +185,60 @@ save.image(outImage)
 message("Copy number rescue for svaba results...")
 segs <- fread(segFile)
 segs <- cbind(SEG.id = 1:nrow(segs), segs)	
-sv.seg <- getSegSVoverlap(segs, svaba, event.cn=unique(segs$Corrected_Call), buffer=cn.buffer.single)
+sv.seg <- getSegSVoverlap(segs, svaba[SPAN > minSVCNoverlapSPAN], event.cn=unique(segs$Corrected_Call), buffer=cn.buffer.single)
 sv.seg.interChr <- getSegSVoverlap(segs, svaba, event.cn=unique(segs$Corrected_Call), buffer=cn.buffer.single, interChr=TRUE)
+
+####### intra-chr ###########
+# only one bkpt needs to be within CN boundary - BX fraction overlap not required
+sv.seg.cn2 <- sv.seg[((bkpt1.1 <= cn.buffer.single | bkpt1.2 <= cn.buffer.single) | 
+		(bkpt2.1 <= cn.buffer.single | bkpt2.2 <= cn.buffer.single))]
+
+sv.seg.cn.dupInd <- sv.seg.cn2[duplicated(SV.id), SV.id]
+indCNmulti <- sv.seg.cn2[SV.id %in% sv.seg.cn.dupInd, {
+		# first breakpoint (start1) near first CN boundary
+		bk1Ind <- which(xor(bkpt1.1 <= cn.buffer.single, bkpt1.2 <= cn.buffer.single) & 
+					(bkpt2.1 > cn.buffer.single & bkpt2.2 > cn.buffer.single))
+		bk2Ind <- which((bkpt1.1 > cn.buffer.single & bkpt1.2 > cn.buffer.single) & 
+					xor(bkpt2.1 <= cn.buffer.single, bkpt2.2 <= cn.buffer.single))
+		sameSegInd <- which((bkpt1.1 <= cn.buffer.single & bkpt2.2 <= cn.buffer.single) &
+					(bkpt1.2 > cn.buffer.both & bkpt2.1 > cn.buffer.both))
+		length(SEG.id[bk1Ind]) > 0 & length(SEG.id[bk2Ind]) > 0 & length(intersect(SEG.id[bk1Ind], SEG.id[bk2Ind])) == 0 & length(sameSegInd) == 0
+		#message("sv", SV.id, "\tb1t", bk1Ind, "\tb2t", bk2Ind)
+		#intersect(SV.id[bk1Ind], SV.id[bk2Ind])
+	}, by = SV.id][V1 == TRUE, SV.id]
+
+sv.segs.cn2.maxAD <- sv.seg.cn2[SV.id %in% indCNmulti, { .SD[which.max(AD)]}, by=SEG.id]
+indCN2 <- sv.segs.cn2.maxAD[, unique(SV.id)]
+
+# only one bkpt needs to be within CN boundary but must satisfy BX fraction overlap
+sv.seg.frac2 <- sv.seg[BXOL >= minBXOL, .(.I, pmin(BX.frac.1,BX.frac.2)), by=SEG.id]
+sv.seg.frac2.ind <- sv.seg.frac2[sv.seg.frac2[V2 > minBXOL.frac.cn, .I[which.max(V2)], by=SEG.id]$V1, I]
+# find single bkpt overlap that is also supported by BX fraction overlap
+## --- BX,CN1 for intrachr SVs not used in final set --- 
+indBXCN2 <- intersect(indCN2, sv.seg[sv.seg.frac2.ind, SV.id])
+
+# both bkpts need to be within boundaries of a CN event - BX fraction overlap not required
+# 1.) start1:segLeft AND start2:segRight but not start1:segRight AND start2:segLeft (since start1 < start2)
+# 2.) Check that at least start1:segLeft or start2:segRight is < cn.buffer.single.noBXreq
+# 3.) Ceck that SV overlap fraction is > minSVCNoverlapFrac
+sv.seg.cn1 <- sv.seg[(((bkpt1.1 <= cn.buffer.both & bkpt2.2 <= cn.buffer.both) &
+						(bkpt1.2 > cn.buffer.both & bkpt2.1 > cn.buffer.both)) |
+					 ((bkpt1.1 <= cn.buffer.both.noBXreq & bkpt2.2 <= cn.buffer.both.noBXreq) |
+						(bkpt1.2 <= cn.buffer.both.noBXreq & bkpt2.1 <= cn.buffer.both.noBXreq))) &
+		(pmin(bkpt1.1, bkpt1.2, bkpt2.1, bkpt2.2) < cn.buffer.both.noBXreq) &
+		sv.overlap.frac > minSVCNoverlapFrac]
+## select best SV overlap with segment (when multiple SVs overlap a single SEG)
+sv.segs.cn1.maxAD <- sv.seg.cn1[, { .SD[which.max(AD)]}, by=SEG.id]
+indCN1 <- sv.segs.cn1.maxAD[, unique(SV.id)]
+
+# find double bkpt overlap that is also supported by BX fraction overlap
+sv.seg.frac1 <- sv.seg.cn1[BXOL >= minBXOL, .(.I, pmin(BX.frac.1,BX.frac.2)), by=SEG.id]
+sv.seg.frac1.ind <- sv.seg.frac1[sv.seg.frac1[V2 > minBXOL.frac.cn, .I[which.max(V2)], by=SEG.id]$V1, I]
+indBXCN1 <- intersect(indCN1, sv.seg.cn1[sv.seg.frac1.ind, SV.id])
+
+####### interchr ###########
 # PASS SV first, then remove CN seg from consideration
 sv.seg.interChr <- sv.seg.interChr[!SEG.id %in% sv.seg.interChr[support == "SVABA", unique(SEG.id)]]
-####### intra-chr ###########
-# only one bkpt needs to be within CN boundary but must satisfy BX fraction overlap
-sv.seg.frac <- sv.seg[BXOL >= minBXOL, .(.I, pmin(BX.frac.1,BX.frac.2)), by=SEG.id]
-sv.seg.frac.ind <- sv.seg.frac[sv.seg.frac[V2 > minBXOL.frac.cn, .I[which.max(V2)], by=SEG.id]$V1, I]
-indCN <- sv.seg[sv.seg.frac.ind, SV.id]
-# both bkpts need to be within boundaries of a CN event - BX fraction overlap not required
-ind.sv.cn <- sv.seg[(bkpt1.1 <= cn.buffer.both | bkpt1.2 <= cn.buffer.both) & 
-		(bkpt2.1 <= cn.buffer.both | bkpt2.2 <= cn.buffer.both), unique(SV.id)]
-####### interchr ###########
 # both bxol frac needs to be > minBXOL.frac.cn, then take max of all SVs overlapping SEG 
 sv.seg.interChr.frac <- sv.seg.interChr[BXOL >= minBXOL, .(.I, pmin(BX.frac.1,BX.frac.2)), by=SEG.id]
 sv.seg.interChr.frac.ind <- sv.seg.interChr.frac[sv.seg.interChr.frac[V2 > minBXOL.frac.cn, .I[which.max(V2)], by=SEG.id]$V1, I]
@@ -175,11 +246,17 @@ indCN.interChr <- sv.seg.interChr[sv.seg.interChr.frac.ind, SV.id]
 
 ## new assignments of support
 # recall: FILTER != "PASS" means event is a candidate for rescue
-svaba[SV.id %in% c(indCN, indCN.interChr) & FILTER == "PASS", support := "SVABA,CN1"]
-svaba[SV.id %in% c(indCN, indCN.interChr) & FILTER != "PASS", support := "BX,CN1"]
-svaba[SV.id %in% ind.sv.cn & FILTER == "PASS", support := "SVABA,CN2"]
-svaba[SV.id %in% ind.sv.cn & FILTER != "PASS", support := "BX,CN2"]
-svaba[!SV.id %in% c(indBX, indSVABA, indFBI, indCN, indCN.interChr, ind.sv.cn), support := NA]
+svaba[, support.orig := support]
+svaba[SV.id %in% c(indCN1) & FILTER == "PASS", support := "SVABA,CN1"]
+svaba[SV.id %in% c(indCN2,indCN.interChr) & FILTER == "PASS", support := "SVABA,CN2"]
+svaba[SV.id %in% c(indCN1) & support.orig == "MANUAL", support := "MANUAL,CN1"]
+svaba[SV.id %in% c(indCN2,indCN.interChr) & support.orig == "MANUAL", support := "MANUAL,CN2"]
+svaba[SV.id %in% c(indCN1) & support.orig == "BX", support := "RESCUE,CN1"]
+svaba[SV.id %in% c(indBXCN1) & support.orig == "BX", support := "BX,CN1"]
+svaba[SV.id %in% c(indCN2) & support.orig == "BX", support := "RESCUE,CN2"]
+svaba[SV.id %in% c(indBXCN2,indCN.interChr) & support.orig == "BX", support := "BX,CN2"]
+svaba[!SV.id %in% c(indBX, indSVABA, indManual, indFBI, indCN.interChr, indCN1, indCN2, indBXCN1, indBXCN2), support := NA]
+svaba[, support.orig := NULL]
 svabaAll <- copy(svaba); setkey(svabaAll, SV.id)
 svabaAll[, Mean.Molecule.Length := meanLength]
 svaba <- svaba[!is.na(support)]
@@ -223,22 +300,29 @@ ind.lr.cn <- NULL
 if (length(lr.seg) > 0){ 
 	# both breakpoints within boundaries of a CN event
 	ind.lr.cn.both <- lr.seg[((bkpt1.1 <= cn.buffer.lr.both | bkpt1.2 <= cn.buffer.lr.both) & 
-						(bkpt2.1 <= cn.buffer.lr.both | bkpt2.2 <= cn.buffer.lr.both)), which = TRUE]
+						(bkpt2.1 <= cn.buffer.lr.both | bkpt2.2 <= cn.buffer.lr.both)) &
+						(pmin(bkpt1.1, bkpt1.2, bkpt2.1, bkpt2.2) < cn.buffer.lr.single) &
+						sv.overlap.frac >= minSVCNoverlapFrac, which = TRUE]
 	# at least one breakpoint within boundary of CN breakpoint
-	ind.lr.cn.single <- lr.seg[bkpt1.1 <= cn.buffer.lr.single | bkpt1.2 <= cn.buffer.lr.single | 
-						bkpt2.1 <= cn.buffer.lr.single | bkpt2.2 <= cn.buffer.lr.single, which = TRUE]
-	# combine both double and single overlaps
-	ind.lr.cn <- lr.seg[unique(c(ind.lr.cn.single, ind.lr.cn.both)), sort(unique(SV.id))]
+	#ind.lr.cn.single <- lr.seg[bkpt1.1 <= cn.buffer.lr.single | bkpt1.2 <= cn.buffer.lr.single | 
+	#					bkpt2.1 <= cn.buffer.lr.single | bkpt2.2 <= cn.buffer.lr.single, which = TRUE]
+	# use only double bkpt overlaps
+	#ind.lr.cn <- lr.seg[unique(c(ind.lr.cn.single, ind.lr.cn.both)), sort(unique(SV.id))]
+	ind.lr.cn <- lr.seg[unique(c(ind.lr.cn.both)), sort(unique(SV.id))]
 }
 ind.lr.cn.interChr <- NULL
 if (length(lr.seg.interChr) > 0){
-	ind.lr.cn.interChr <- lr.seg.interChr[, unique(SV.id)]
+	# both breakpoints within boundaries of at least 1 CN event
+	ind.lr.cn.interChr <- lr.seg.interChr[((bkpt1.1 <= cn.buffer.lr.both | bkpt1.2 <= cn.buffer.lr.both) | 
+						(bkpt2.1 <= cn.buffer.lr.both | bkpt2.2 <= cn.buffer.lr.both)), which = TRUE]
 }
 # assign support="CN" if supported by CNA segment overlap
 lr[SV.id %in% unique(c(ind.lr.cn, ind.lr.cn.interChr)) & SOURCE == "CNV", support := "CN"]
 lr[SV.id %in% unique(c(ind.lr.cn, ind.lr.cn.interChr)) & grepl("SV", SOURCE), support := "SV,CN"]
-# exclude events not supported by CNA and not acceptable events
-lr[!SV.id %in% unique(c(ind.lr.pass, ind.lr.cn, ind.lr.cn.interChr)), support := NA]
+# exclude events not supported by CNA and not acceptable events (i.e. not PASS)
+lr[!SV.id %in% unique(c(ind.lr.pass, ind.lr.cn, ind.lr.cn.interChr)), support := "NoCNsupport"]
+# Longranger filter pass  
+lr[FILTER == "PASS" & support == ".", support := "LRSV"]
 lr[, Mean.Molecule.Length := meanLength]
 lr <- lr[!is.na(support)]
 save.image(outImage)

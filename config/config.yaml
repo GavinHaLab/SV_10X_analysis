@@ -11,7 +11,8 @@ bxRescue_script:  code/barCodeOverlap.R
 combineSVCN_script:  code/combineSVABA-GROCSVS-TITAN.R
 getLRsomaticSV_script:  code/getLongRangerSomaticSV.R
 buildPoN_script:  code/buildGermlineSVPoN.R
-filterPoNSV_script: code/filterPoNSVs.R
+annotPoNSV_script:  code/annotPoNSVs.R
+filterSVs_script: code/filterToolSVs.R
 plotSVCN_script:  code/plotTitanSvaba.R
 plotCircos_script: code/create_circosPlot.R
 

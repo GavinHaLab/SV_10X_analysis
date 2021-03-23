@@ -11,7 +11,7 @@ option_list <- list(
 	make_option(c("--SVABAdir"), type="character", help="Path to directory containing SVABA SV results."),
 	make_option(c("--LRdir"), type="character", help="Path to directory containing SVs extracted from LongRanger results."),
 	make_option(c("--svaba_funcs"), type = "character", help = "Path to file containing SVABA R functions to source."),
-	make_option(c("--blackListBinWidth"), type="integer", default=1000, help="Length (bp) for individual bins in the output black list. [Default: %default]"),
+	make_option(c("--blackListBinWidth"), type="integer", default=100, help="Length (bp) for individual bins in the output black list. [Default: %default]"),
 	make_option(c("--genomeBuild"), type="character", default="hg19", help = "Genome build: hg19 or hg38. Default [%default]"),
 	make_option(c("--genomeStyle"), type = "character", default = "NCBI", help = "NCBI or UCSC chromosome naming convention; use UCSC if desired output is to have \"chr\" string. [Default: %default]"),
 	make_option(c("--chrs"), type = "character", default = "c(1:22, 'X')", help = "Chromosomes to analyze; string [Default: %default"),
@@ -23,10 +23,11 @@ parseobj <- OptionParser(option_list=option_list, usage = "usage: Rscript %prog 
 opt <- parse_args(parseobj)
 print(opt)
 
-library(VariantAnnotation)
-library(GenomicRanges)
 library(data.table)
+library(GenomicRanges)
+library(VariantAnnotation)
 library(stringr)
+
 args <- commandArgs(TRUE)
 options(stringsAsFactors=FALSE, width=160, scipen=999)
 
@@ -103,10 +104,11 @@ sv.dt <- rbind(sv.1, sv.2)
 
 
 counts <- sv.dt[, .(
-	count = .N, SOURCE = paste0(unique(SOURCE), collapse=","),
-	orient_1 = paste0(unique(orient_1), collapse=","),
-	orient_2 = paste0(unique(orient_2), collapse=","),
-	SPAN = paste0(sort(unique(SPAN)), collapse=",")
+	sampleCount = length(unique(Sample)) 
+	#SOURCE = paste0(unique(SOURCE), collapse=","),
+	#orient_1 = paste0(unique(orient_1), collapse=","),
+	#orient_2 = paste0(unique(orient_2), collapse=","),
+	#SPAN = paste0(sort(unique(SPAN)), collapse=",")
 	), by=c("chromosome", "start")]
 counts$chromosome <- factor(counts$chromosome, levels = chrs)
 counts <- counts[order(chromosome, start)]
@@ -125,6 +127,7 @@ hits.sample.count <- hits[, sv.dt[subjectHits, length(unique(Sample))], by=query
 tile.gr$SVsampleCounts <- 0
 tile.gr$SVsampleCounts[hits.sample.count$queryHits] <- hits.sample.count$V1
 tile.dt <- as.data.table(tile.gr)
+tile.dt <- tile.dt[SVbkptCounts > 0]
 # ## get all indices that are seen > 1 time(s)
 # dup.ind <- which(duplicated(sv.gr) | duplicated(sv.gr, fromLast = TRUE)) 
 save.image(outImage)
