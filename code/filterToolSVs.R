@@ -4,8 +4,6 @@
 #' Fred Hutchinson Cancer Research Center
 #' contact: <gha@fredhutch.org>
 #' 
-#' author: Anna Hoge <ahoge@fredhutch.org>
-#''
 #' date:	  Dec 26, 2020
 #'
 #' description: #effectively just removes only longranger calls for this dataset since minMoleculeLength=100kbps
@@ -144,8 +142,17 @@ if (length(toolExclude.ind) > 0){
 ###########################################################
 #### CATEGORIZE SV BASED ON SIZE AND CN OVERLAP TYPE ######
 ###########################################################
-sv[is.na(SV.Filter) & (is.na(CN_overlap_type) | CN_overlap_type == "Unknown-ShortSVwithCN"), 
+# label intrachr SVs with no CN_overlap_type or with
+# CN_overlap_type "Unknown-ShortSVwithCN" as SV.Filter "ShortSV"
+sv[is.na(SV.Filter) & (type != "InterChr") & (is.na(CN_overlap_type) | CN_overlap_type == "Unknown-ShortSVwithCN"), 
 	SV.Filter := "ShortSV"]
+    
+# label interchr SVs with "BX" support that are only called by one tool
+# as "SingleToolInterChrBX"
+# (Tool.multi should equal Tool, and CN_overlap_type should be NA.  This is a redundant check.)
+sv[is.na(SV.Filter) & (type == "InterChr") & is.na(CN_overlap_type) & (Tool.multi == Tool) & (support == "BX"),
+    SV.Filter := "SingleToolInterChrBX"]
+    
 # exclude LONGRANGER calls with only CN support (i.e. not SVs) that don't overlap
 # with other tools
 sv[Tool.multi == "LONGRANGER" & support %in% c("CN", "NoCNsupport"), SV.Filter := "LRCN"]
@@ -177,16 +184,6 @@ sv.counts <- cbind(sv[, .N, by=Sample],
 
 ## print out summary
 fwrite(sv.counts, file = outSummary, col.names=TRUE, row.names=FALSE, quote=FALSE, sep="\t")
-
-
-## split files into individual samples
-# dir.create(outDir)
-# for (i in 1:numSamples){
-# 	id <- samples[i]
-# 	sv.sample <- sv.filt[Sample == id]
-# 	outBedFile <- paste0(outDir, "/", id, ".svaba-titan.PoNfilter.Toolfilter.bedpe")
-# 	fwrite(sv.sample, file = outBedFile, col.names=TRUE, row.names=FALSE, quote=FALSE, sep="\t")
-# }
 
 
 
