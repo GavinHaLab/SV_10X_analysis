@@ -496,24 +496,21 @@ consensus.sv.id <- sv[which(rowSums(!is.na(sv[, .(overlap.SVABA.id, overlap.GROC
 ## interchromosomal translocations - balanced vs unbalanced ##
 ########################################################################
 message("Interchromosomal translocations")
-#interchr.seg.sv <- getSegSVoverlap(segs, sv, event.cn=neut.cn, buffer=cn.buffer, interChr = TRUE)
-interchrUBal.cn.sv <- sv[type == "InterChr" & 
-		((Copy_Number_1_prev != Copy_Number_1_next) | (Copy_Number_2_prev != Copy_Number_2_next))]
-		#((orient_1 == "rev" & Copy_Number_1_prev > Copy_Number_1_next) | 
-		# (orient_1 == "fwd" & Copy_Number_1_prev < Copy_Number_1_next)) &
-		#((orient_2 == "rev" & Copy_Number_2_prev > Copy_Number_2_next) |
-		# (orient_2 == "fwd" & Copy_Number_2_prev < Copy_Number_2_next)) |
-if (nrow(interchrUBal.cn.sv) > 0){
-	interchrUBal.sv.id <- sort(interchrUBal.cn.sv$SV.combined.id)
-	sv[SV.combined.id %in% interchrUBal.sv.id, CN_overlap_type := "Trans-Unbal"]
-	interchrBAL.cn.sv <- sv[type == "InterChr" &
-			(Copy_Number_1_prev == Copy_Number_1_next) & (Copy_Number_2_prev == Copy_Number_2_next)]
-	interchrBAL.sv.id <- sort(interchrBAL.cn.sv$SV.combined.id)
-	sv[SV.combined.id %in% interchrBAL.sv.id, CN_overlap_type := "Trans-Bal"]
-	###
-    # exclude BX rescue for interchr if not seen by another tool
-	sv[type == "InterChr" & !SV.combined.id %in% consensus.sv.id & (support == "BX"), CN_overlap_type := NA] 
-}
+
+# label balanced inter-chromosomal SVs
+interchrBAL.cn.sv <- sv[type == "InterChr" &
+		(Copy_Number_1_prev == Copy_Number_1_next) & (Copy_Number_2_prev == Copy_Number_2_next)]
+interchrBAL.sv.id <- sort(interchrBAL.cn.sv$SV.combined.id)
+sv[SV.combined.id %in% interchrBAL.sv.id, CN_overlap_type := "Trans-Bal"]
+
+# label unbalanced inter-chromosomal SVs, including SVs without complete CN information
+interchrUBal.cn.sv <- sv[type == "InterChr" &
+        (!SV.combined.id %in% interchrBAL.sv.id)]
+interchrUBal.sv.id <- sort(interchrUBal.cn.sv$SV.combined.id)
+sv[SV.combined.id %in% interchrUBal.sv.id, CN_overlap_type := "Trans-Unbal"]
+
+# exclude BX rescue for interchr if not seen by another tool
+sv[type == "InterChr" & !SV.combined.id %in% consensus.sv.id & (support == "BX"), CN_overlap_type := NA] 
 
 ########################################################################
 ## simple deletions ##
