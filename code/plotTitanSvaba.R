@@ -26,6 +26,7 @@ option_list <- list(
   make_option(c("--chrs"), type = "character", default = "c(1:22, 'X')", help = "Chromosomes to plot; string [Default: %default"),
   make_option(c("--start"), type = "integer", default = NULL, help = "Start coordinate for zoom plots"),
   make_option(c("--end"), type = "integer", default = NULL, help = "End coordinate for zoom plots"),
+  make_option(c("--yaxis"), type = "character", default = "logratio", help = "The y-axis data type: integer or logratio. [Default: %default]."),
   make_option(c("--plotCNAtype"), type="character", default = "titan", help = "titan or ichor; if titan, then will also plot haplotype fraction. [Default: %default]."),
   make_option(c("--plotYlim"), type = "character", default = "c(-2,6)", help = "Y limits for plotting log ratio. [Default: %default]."),
   make_option(c("--plotSize"), type = "character", default = "c(8,4)", help = "width and height in inches. [Default: %default]."),
@@ -82,7 +83,7 @@ plotFormat <- tools::file_ext(outPlotFile)
 width <- plotSize[1]  #6 8 
 height <- plotSize[2]  #3 3.5 #4 
 spacing <- 3
-yaxis <- "integer"
+yaxis <- opt$yaxis #"integer"
 minSPAN <- 10000
 ylimSV <- ylim
 plotArrows <- FALSE
@@ -94,6 +95,9 @@ offset.factor <- 1.15 # sv drawn outside of plot
 lcol <- NULL
 arr.col <- NULL
 svabaCol <- "black"
+#https://stackoverflow.com/questions/57153428/r-plot-color-combinations-that-are-colorblind-accessible
+svCol <- c('TandemDuplication'='#D55E00', 'Deletion'='#009E73', 'Inversion'='#332288',
+  'Translocation'='#0072B2','Balanced'='#F0E442','Unbalanced'='#CC79A7') #"black"
 rescueCol <- "purple"
 lrCol <- "lightgrey"
 grocCol <- "blue"
@@ -123,7 +127,7 @@ if (zoom){
   cex <- 0.25
   cytoBand <- T
   xaxt <- "n"
-  yaxis <- "logratio"
+  #yaxis <- "logratio"
   plotAtCentre <- FALSE
   cnColor <- FALSE
   plotIdio <- TRUE
@@ -212,8 +216,16 @@ if (exclude.na.snp){
 ############# load Combined SV (SVABA, GROC, LongRanger) ##############
 sv <- fread(svFile, na.string = ".")
 # filter very short SVABA calls with no CN_overlap_type or short SVABA calls with CN overlap
-sv <- sv[SV.Filter == "KEEP"]
+sv <- sv[SV.Filter == "KEEP" & !is.na(CN_overlap_type)]
 #sv <- sv[CN_overlap_type != "." & CN_overlap_type != "Unknown-ShortSVwithCN"]
+# consolidate SV classes into those defined by `svabaCol`
+#Tandem Duplication           Deletion          Inversion              Trans           Balanced         Unbalanced
+sv[, SV.class := CN_overlap_type]
+sv[grepl("TandemDup", CN_overlap_type), SV.class := "TandemDuplication"]
+sv[grepl("Inversion", CN_overlap_type), SV.class := "Inversion"]
+sv[grepl("Trans", CN_overlap_type), SV.class := "Translocation"]
+sv[is.na(CN_overlap_type), SV.class := "Unbalanced"]
+sv[, color := svCol[SV.class]]
 #save.image(file=outImage)
 
 #####################################
@@ -290,7 +302,8 @@ for (j in 1:length(chrStr)){
     plotRearrangementArcs(sv[Tool=="LONGRANGER"], cn=as.data.frame(ulp), chr=chrStr[j], 
                   interchr = interchr, plotAtCentre = plotAtCentre,
                   xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
-                  centreLine=centreLine, buffer=buffer, lcol=lrCol, arr.col=lrCol, 
+                  centreLine=centreLine, buffer=buffer, svTypeCol=!is.null(svCol), 
+                  lcol=lrCol, arr.col=lrCol, lwd = 2,
                   endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
     ## plot BX Rescue arcs ##
     message("Plotting CN rescue")
@@ -299,7 +312,8 @@ for (j in 1:length(chrStr)){
     							cn=as.data.frame(ulp), 
     							chr=chrStr[j], interchr = interchr, plotAtCentre = plotAtCentre,
                   xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
-                  centreLine=centreLine, buffer=buffer, lcol=rescueCol, arr.col=rescueCol, 
+                  centreLine=centreLine, buffer=buffer, svTypeCol=!is.null(svCol),
+                  lcol=rescueCol, arr.col=rescueCol, lwd = 2,
                   endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
     # message("Plotting CN rescue - short SVs")
     # plotRearrangementArcs(sv[Tool=="SVABA" & support %in% c("BX,CN1","BX,CN2","SVABA,CN1","SVABA,CN2") &
@@ -314,28 +328,32 @@ for (j in 1:length(chrStr)){
     							cn=as.data.frame(ulp), 
     							chr=chrStr[j], interchr = interchr, plotAtCentre = plotAtCentre,
                   xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
-                  centreLine=centreLine, buffer=buffer, lcol=rescueCol, arr.col=rescueCol, 
+                  centreLine=centreLine, buffer=buffer, svTypeCol=!is.null(svCol), 
+                  lcol=rescueCol, arr.col=rescueCol, lwd = 2,
                   endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
     message("Plotting manual SVs")
     plotRearrangementArcs(sv[Tool=="SVABA" & (support %in% c("MANUAL","MANUAL,CN1","MANUAL,CN2"))], 
                   cn=as.data.frame(ulp), 
                   chr=chrStr[j], interchr = interchr, plotAtCentre = plotAtCentre,
                   xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
-                  centreLine=centreLine, buffer=buffer, lcol=manualCol, arr.col=manualCol, 
+                  centreLine=centreLine, buffer=buffer, svTypeCol=!is.null(svCol),
+                  lcol=manualCol, arr.col=manualCol, lwd = 2,
                   endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
     ## plot SVABA arcs ##
     message("Plotting svaba")
     plotRearrangementArcs(sv[Tool=="SVABA" & support %in% c("SVABA","SVABA,CN1","SVABA,CN2")], cn=as.data.frame(ulp), 
     							chr=chrStr[j], interchr = interchr, plotAtCentre = plotAtCentre,
                   xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
-                  centreLine=centreLine, buffer=buffer, lcol=svabaCol, arr.col=svabaCol, 
+                  centreLine=centreLine, buffer=buffer, svTypeCol=!is.null(svCol),
+                  lcol=svabaCol, arr.col=svabaCol, lwd = 2,
                   endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
     ## plot GROCSVS arcs ##
     message("Plotting grocsvs")
     plotRearrangementArcs(sv[Tool=="GROCSVS"], cn=as.data.frame(ulp), chr=chrStr[j], 
                   interchr = interchr, plotAtCentre = plotAtCentre,
                   xlim=xlim, arcHeight=ylimSV, ploidy = NULL, lty = 1, offset.factor=offset.factor,
-                  centreLine=centreLine, buffer=buffer, lcol=grocCol, arr.col=grocCol, 
+                  centreLine=centreLine, buffer=buffer, svTypeCol=!is.null(svCol),
+                  lcol=grocCol, arr.col=grocCol, lwd = 2,
                   endhead = plotArrows, arr.pos = 1.0, minSPAN = 0)
   }
   
